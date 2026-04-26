@@ -12,23 +12,41 @@ custom_css = """
     header {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* Make the calendar buttons look like thick, touch-friendly boxes */
+    /* 1. Force the columns into a horizontal, swipeable row on mobile */
+    div[data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch; /* Smooth iOS scrolling */
+        padding-bottom: 15px; /* Space for the invisible scrollbar */
+        gap: 0.5rem;
+    }
+    
+    /* 2. Lock the width of the calendar boxes so they don't squish */
+    div[data-testid="column"] {
+        min-width: 85px !important;
+        flex: 0 0 auto !important;
+    }
+    
+    /* 3. Style the calendar boxes (Buttons) */
     div.stButton > button {
-        height: 60px;
-        border-radius: 10px;
-        border: 1px solid #d1d5db;
+        height: 70px;
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
         background-color: #ffffff;
-        font-weight: 600;
         color: #1c1e21;
+        font-weight: 700;
+        font-size: 14px;
+        white-space: pre-wrap !important; /* Forces the newline (\n) to work */
+        line-height: 1.3;
         transition: all 0.2s;
     }
-    div.stButton > button:hover {
+    
+    /* 4. Active/Hover states for the boxes */
+    div.stButton > button:hover, div.stButton > button:active, div.stButton > button:focus {
         border-color: #007AFF;
         color: #007AFF;
-    }
-    div.stButton > button:active {
-        background-color: #007AFF;
-        color: white;
+        background-color: #f0f8ff;
     }
 </style>
 """
@@ -83,28 +101,38 @@ for section in sections:
         days_db[title] = content
 
 # --- 5. INITIALIZE STATE MEMORY ---
-# This allows the app to remember which day box you clicked
 day_keys = list(days_db.keys())
 if "selected_day" not in st.session_state and len(day_keys) > 0:
-    st.session_state.selected_day = day_keys[0] # Default to the first day
+    st.session_state.selected_day = day_keys[0] 
 
 # ==========================================
 # UI BUILD OUT STARTS HERE
 # ==========================================
 st.title("📱 EUROPE 2026")
 
-# --- 6. THE CALENDAR GRID ---
+# --- 6. THE CALENDAR GRID (Horizontal Strip) ---
 st.subheader("🗓️ Master Timeline")
 
-# Create a 3-column grid for the calendar boxes
-cols = st.columns(3)
+# Create a dynamic number of columns based on how many days are in the document
+cols = st.columns(len(day_keys))
+
 for i, day_title in enumerate(day_keys):
-    # Extract just the "Sun, Aug 9" part for the tiny buttons to keep it clean
-    short_date = day_title.split(' – ')[0].replace('day', '') 
+    # Text Processing: Turn "Sunday, August 9 – The Alfama Reset" into "Aug 9 \n SUN"
+    try:
+        parts = day_title.split(' – ')[0].split(', ')
+        day_word = parts[0][:3].upper() # "SUN"
+        
+        date_parts = parts[1].split(' ')
+        month_word = date_parts[0][:3] # "Aug"
+        day_num = date_parts[1] # "9"
+        
+        button_label = f"{month_word} {day_num}\n{day_word}"
+    except:
+        # Fallback if the formatting in the doc is slightly off
+        button_label = f"Day\n{i+1}"
     
-    with cols[i % 3]:
-        # If a button is clicked, update the session memory
-        if st.button(short_date, key=f"btn_{i}", use_container_width=True):
+    with cols[i]:
+        if st.button(button_label, key=f"btn_{i}"):
             st.session_state.selected_day = day_title
 
 st.divider()
@@ -114,18 +142,18 @@ selected = st.session_state.selected_day
 st.markdown(f"### {selected}")
 st.info(f"Forecast: {get_weather(selected)}")
 
-# Render Map if coordinates exist
+# Render Map
 for city, coords in map_data.items():
     if city in selected or city in days_db[selected]:
         st.map(coords, zoom=12, height=150)
         break
 
-# Render the Markdown text for that day
+# Render the Agenda
 st.markdown(days_db[selected])
 
 st.divider()
 
-# --- 8. THE DIRECTORIES (Still Collapsed) ---
+# --- 8. THE DIRECTORIES (Collapsible) ---
 st.subheader("📂 Operations Vault")
 for dir_title, dir_content in directories_db.items():
     with st.expander(f"📁 {dir_title}", expanded=False):
@@ -162,4 +190,3 @@ if prompt := st.chat_input("Ask a logistics question..."):
     with st.chat_message("assistant"):
         st.markdown(reply)
     st.session_state.messages.append({"role": "assistant", "content": reply})
-
