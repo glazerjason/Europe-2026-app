@@ -3,22 +3,23 @@ import pandas as pd
 import google.generativeai as genai
 import re
 
-# --- 1. UI CONFIGURATION & ANTI-STACKING CSS ---
+# --- 1. UI CONFIGURATION & HIGH-COMPRESSION CSS ---
 st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="centered")
 
 custom_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* 1. ANTI-STACKING: Force horizontal row even on mobile screens */
+    /* 1. ROW COMPRESSION: Pull the 3 weeks tightly together vertically */
     div[data-testid="stHorizontalBlock"] {
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         gap: 0px !important; 
-        margin-bottom: 8px !important;
+        padding-bottom: 0px !important;
+        margin-bottom: -15px !important; /* Aggressively kills the empty space between weeks */
     }
     
-    /* 2. THE 7-DAY SPLIT: Force every column to be exactly 1/7th of the screen */
+    /* 2. THE 7-DAY SPLIT: Force exactly 1/7th width with zero padding */
     div[data-testid="column"] {
         width: 14.28% !important; 
         flex: 1 1 0% !important;
@@ -26,20 +27,21 @@ custom_css = """
         padding: 0px !important; 
     }
     
-    /* 3. NAKED BUTTONS: Scaled to fit 7 across on a phone */
+    /* 3. NAKED BUTTONS: Perfectly proportioned for an iPhone screen */
     div.stButton > button {
         background-color: transparent !important;
         border: none !important;
         box-shadow: none !important;
         color: #9ca3af; 
-        height: 55px !important;
+        height: 48px !important; /* Shorter to maintain a square/compact aspect ratio */
         width: 100% !important;
         padding: 0px !important;
-        font-size: 12px !important; /* Slightly smaller to fit mobile screens perfectly */
+        font-size: 11px !important; /* Tiny native font to prevent layout breaking */
         font-weight: 600; 
         white-space: pre-wrap !important;
         line-height: 1.1;
         transition: all 0.2s;
+        margin: 0px !important;
     }
     
     /* Hover state */
@@ -47,7 +49,7 @@ custom_css = """
         color: #1c1e21 !important; 
     }
     
-    /* 4. HIGHLIGHT STATE: Blue text and soft background for the selected day */
+    /* 4. HIGHLIGHT STATE: Tight, rounded background behind the active day */
     div.stButton > button[kind="primary"] { 
         color: #007AFF !important; 
         font-weight: 800 !important;
@@ -163,9 +165,11 @@ for week in weeks:
                     st.session_state.selected_day = day_title
                     st.rerun()
             else:
-                # Ghost block to keep the empty days perfectly spaced
-                st.markdown("<div style='height: 55px;'></div>", unsafe_allow_html=True)
+                # Ghost block exactly matching the button height to keep rows aligned
+                st.markdown("<div style='height: 48px;'></div>", unsafe_allow_html=True)
 
+# Extra spacer below the calendar so it doesn't collide with the HUD
+st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
 st.divider()
 
 # --- 6. THE SELECTED DAY HUD ---
