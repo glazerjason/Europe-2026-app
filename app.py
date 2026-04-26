@@ -10,30 +10,23 @@ custom_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* 1. Kill the gap completely */
+    /* 1. Force columns to stay horizontal on mobile (no stacking) */
     div[data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
-        gap: 0px !important; 
-        margin-bottom: 8px;
-        justify-content: flex-start !important; 
+        margin-bottom: 5px;
     }
     
-    /* 2. Lock width & overlap the borders by 1px so they fuse together */
+    /* 2. Tighten the gap between the columns to make them touch closely */
     div[data-testid="column"] {
-        flex: 0 0 60px !important;
-        width: 60px !important;
-        min-width: 60px !important;
-        padding: 0 !important;
-        margin-right: -1px !important; 
-        z-index: 0;
+        padding: 0px 3px !important; 
     }
     
-    /* 3. Make all boxes perfectly square on the inside edges */
+    /* 3. Style the square buttons */
     div.stButton > button {
         height: 60px !important;
         width: 100% !important;
-        border-radius: 0px !important; 
-        border: 1px solid #d1d5db !important;
+        border-radius: 8px;
+        border: 1px solid #d1d5db;
         padding: 0px !important;
         background-color: #ffffff;
         color: #1c1e21;
@@ -42,26 +35,13 @@ custom_css = """
         white-space: pre-wrap !important;
         line-height: 1.2;
         transition: all 0.2s;
-        margin: 0px !important;
-        position: relative;
     }
     
-    /* 4. Round ONLY the outside edges of the first and last boxes in the row */
-    div[data-testid="column"]:first-child div.stButton > button {
-        border-top-left-radius: 10px !important;
-        border-bottom-left-radius: 10px !important;
-    }
-    div[data-testid="column"]:last-child div.stButton > button {
-        border-top-right-radius: 10px !important;
-        border-bottom-right-radius: 10px !important;
-    }
-    
-    /* 5. Highlight State: Snap the blue border over the adjacent grey boxes */
+    /* 4. Highlight State */
     div.stButton > button:hover, div.stButton > button:active, div.stButton > button:focus { 
         border-color: #007AFF !important; 
-        color: #007AFF; 
-        background-color: #f0f8ff;
-        z-index: 10 !important; 
+        color: #007AFF !important; 
+        background-color: #f0f8ff !important;
     }
 </style>
 """
@@ -78,25 +58,38 @@ def load_data():
 
 raw_text = load_data()
 
-# --- 3. THE SMART PARSER ---
+# --- 3. THE "LINE-BY-LINE" SCANNER (Guarantees no lost text) ---
+weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 days_db = {}
 directories_db = {}
-sections = re.split(r'\n(?=#{1,2} )', '\n' + raw_text)
+current_bucket = None
 
-weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-
-for section in sections:
-    if not section.strip(): continue
-    lines = section.strip().split('\n')
-    clean_title = re.sub(r'^#{1,2}\s+', '', lines[0]).strip()
-    content = '\n'.join(lines[1:]).strip()
+# Read the document one single line at a time
+for line in raw_text.split('\n'):
+    clean_line = line.strip()
+    is_header = clean_line.startswith('#')
     
-    if 'DIRECTORY' in clean_title:
-        directories_db[clean_title.replace('📚 DIRECTORY:', '').strip()] = content
-    elif any(clean_title.startswith(day) for day in weekdays):
-        days_db[clean_title] = content
+    if is_header:
+        header_text = re.sub(r'^#{1,2}\s+', '', clean_line).strip()
+        
+        if 'DIRECTORY' in header_text:
+            current_bucket = header_text.replace('📚 DIRECTORY:', '').strip()
+            directories_db[current_bucket] = ""
+            continue
+            
+        elif any(day in header_text for day in weekdays):
+            current_bucket = header_text
+            days_db[current_bucket] = ""
+            continue
+
+    # If it's not a header, drop the text into whatever bucket is currently open
+    if current_bucket in directories_db:
+        directories_db[current_bucket] += line + "\n"
+    elif current_bucket in days_db:
+        days_db[current_bucket] += line + "\n"
 
 day_keys = list(days_db.keys())
+
 if not day_keys:
     st.error("⚠️ No days found. Ensure your dates start with 'Monday', 'Tuesday', etc.")
     st.stop()
@@ -121,31 +114,39 @@ map_data = {
 st.title("📱 EUROPE 2026")
 st.subheader("🗓️ Master Timeline")
 
-# --- 5. THE CALENDAR GRID GENERATOR ---
-row1_days = day_keys[0:6]
-row2_days = day_keys[6:13]
-row3_days = day_keys[13:]
+# --- 5. THE CALENDAR GRID GENERATOR (The Ghost Column Fix) ---
+# Break the trip into 7-day rows
+rows = [day_keys[x:x+7] for x in range(0, len(day_keys), 7)]
 
 def render_row(days_array):
     if not days_array: return
-    cols = st.columns(len(days_array))
-    for i, day_title in enumerate(days_array):
-        try:
-            day_name = day_title.split(',')[0][:3].upper() 
-            date_num = re.search(r'\d+', day_title).group() 
-            button_label = f"{day_name}\n{date_num}"
-        except:
-            button_label = f"Day\n?"
-            
+    # ALWAYS generate exactly 7 columns so Streamlit never stretches them
+    cols = st.columns(7) 
+    
+    for i in range(7):
         with cols[i]:
-            btn_type = "primary" if day_title == st.session_state.selected_day else "secondary"
-            if st.button(button_label, key=day_title, type=btn_type, use_container_width=True):
-                st.session_state.selected_day = day_title
-                st.rerun()
+            if i < len(days_array):
+                day_title = days_array[i]
+                try:
+                    # Safely extract TUE and 28
+                    day_name = next(d for d in weekdays if d in day_title)[:3].upper()
+                    date_num = re.search(r'\d+', day_title).group()
+                    button_label = f"{day_name}\n{date_num}"
+                except:
+                    button_label = f"Day\n{i+1}"
+                
+                # Button Logic
+                btn_type = "primary" if day_title == st.session_state.selected_day else "secondary"
+                if st.button(button_label, key=f"btn_{day_title}", type=btn_type, use_container_width=True):
+                    st.session_state.selected_day = day_title
+                    st.rerun()
+            else:
+                # If there is no day for this column, inject an invisible ghost block
+                st.empty()
 
-render_row(row1_days)
-render_row(row2_days)
-render_row(row3_days)
+# Render all generated rows
+for row in rows:
+    render_row(row)
 
 st.divider()
 
@@ -153,3 +154,48 @@ st.divider()
 selected = st.session_state.selected_day
 st.markdown(f"### {selected}")
 st.info(f"Forecast: {get_weather(selected)}")
+
+for city, coords in map_data.items():
+    if city in selected or city in days_db[selected]:
+        st.map(coords, zoom=12, height=150)
+        break
+
+# Safely output the captured text
+st.markdown(days_db[selected])
+st.divider()
+
+# --- 7. DIRECTORIES ---
+st.subheader("📂 Operations Vault")
+for dir_title, dir_content in directories_db.items():
+    with st.expander(f"📁 {dir_title}", expanded=False):
+        st.markdown(dir_content)
+st.divider()
+
+# --- 8. AI AGENT ---
+st.subheader("🤖 Agent Co-Pilot")
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+if prompt := st.chat_input("Ask a logistics question..."):
+    st.chat_message("user").markdown(prompt)
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    try:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        best_model = next((m for m in valid_models if 'flash' in m), valid_models[0])
+        model = genai.GenerativeModel(best_model)
+        
+        system_prompt = f"Answer using ONLY this document:\n\n{raw_text}\n\nQuestion: {prompt}"
+        response = model.generate_content(system_prompt)
+        reply = response.text
+    except Exception as e:
+        reply = f"⚠️ System Error: {e}"
+
+    with st.chat_message("assistant"):
+        st.markdown(reply)
+    st.session_state.messages.append({"role": "assistant", "content": reply})
