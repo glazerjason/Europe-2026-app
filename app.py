@@ -3,32 +3,39 @@ import pandas as pd
 import google.generativeai as genai
 import re
 
-# --- 1. UI CONFIGURATION & "NAKED" CSS ---
+# --- 1. UI CONFIGURATION & ANTI-STACKING CSS ---
 st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="centered")
 
 custom_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* 1. Tighten the Grid */
+    /* 1. ANTI-STACKING: Force horizontal row even on mobile screens */
     div[data-testid="stHorizontalBlock"] {
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
         gap: 0px !important; 
-        margin-bottom: 2px;
+        margin-bottom: 8px !important;
     }
+    
+    /* 2. THE 7-DAY SPLIT: Force every column to be exactly 1/7th of the screen */
     div[data-testid="column"] {
+        width: 14.28% !important; 
+        flex: 1 1 0% !important;
+        min-width: 0 !important;
         padding: 0px !important; 
     }
     
-    /* 2. NAKED BUTTONS: Strip the borders, backgrounds, and shadows */
+    /* 3. NAKED BUTTONS: Scaled to fit 7 across on a phone */
     div.stButton > button {
         background-color: transparent !important;
         border: none !important;
         box-shadow: none !important;
-        color: #9ca3af; /* Subtle gray for unselected days */
-        height: 50px !important;
+        color: #9ca3af; 
+        height: 55px !important;
         width: 100% !important;
         padding: 0px !important;
-        font-size: 13px !important;
+        font-size: 12px !important; /* Slightly smaller to fit mobile screens perfectly */
         font-weight: 600; 
         white-space: pre-wrap !important;
         line-height: 1.1;
@@ -40,7 +47,7 @@ custom_css = """
         color: #1c1e21 !important; 
     }
     
-    /* 3. HIGHLIGHT STATE: Blue text and a soft, borderless background */
+    /* 4. HIGHLIGHT STATE: Blue text and soft background for the selected day */
     div.stButton > button[kind="primary"] { 
         color: #007AFF !important; 
         font-weight: 800 !important;
@@ -99,7 +106,6 @@ if "selected_day" not in st.session_state:
     st.session_state.selected_day = day_keys[0]
 
 # --- 4. TRUE CALENDAR MATRIX GENERATOR ---
-# Maps your days to specific columns (Sun=0, Sat=6)
 day_map = {"Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, "Friday": 5, "Saturday": 6}
 
 weeks = []
@@ -107,12 +113,10 @@ current_week = [None] * 7
 last_idx = -1
 
 for day in day_keys:
-    # Find what day of the week this is
     idx = next((d_idx for d_name, d_idx in day_map.items() if d_name in day), None)
     
     if idx is None: continue
         
-    # If the day index is less than or equal to the last one, it means we wrapped to a new week
     if idx <= last_idx:
         weeks.append(current_week)
         current_week = [None] * 7
@@ -140,7 +144,7 @@ map_data = {
 st.title("📱 EUROPE 2026")
 st.subheader("🗓️ Master Timeline")
 
-# Render the dynamic grid
+# Render the 7-Column Grid
 for week in weeks:
     cols = st.columns(7)
     for i in range(7):
@@ -159,8 +163,8 @@ for week in weeks:
                     st.session_state.selected_day = day_title
                     st.rerun()
             else:
-                # Injects an invisible block for non-travel days to keep alignment perfect
-                st.markdown("<div style='height: 50px;'></div>", unsafe_allow_html=True)
+                # Ghost block to keep the empty days perfectly spaced
+                st.markdown("<div style='height: 55px;'></div>", unsafe_allow_html=True)
 
 st.divider()
 
