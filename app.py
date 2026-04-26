@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 import re
+import streamlit.components.v1 as components
 
 # --- 1. UI CONFIGURATION & CSS GRID OVERRIDE ---
 st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="centered")
@@ -157,7 +158,6 @@ for week in weeks:
         with cols[i]:
             if day_title:
                 try:
-                    # FIX: Slice to [:2] for strict 2-letter days (MO, TU, WE)
                     day_name = next(d for d in weekdays if d in day_title)[:2].upper()
                     date_num = re.search(r'\d+', day_title).group()
                     flag = get_country_flag(days_db[day_title] + day_title)
@@ -224,3 +224,18 @@ if prompt := st.chat_input("Ask a logistics question..."):
     with st.chat_message("assistant"):
         st.markdown(reply)
     st.session_state.messages.append({"role": "assistant", "content": reply})
+
+# --- 9. THE SCROLL-LOCK INJECTION ---
+# This invisible script fires after the chat input renders to force the view back to the top
+components.html(
+    """
+    <script>
+        var body = window.parent.document.querySelector(".main");
+        if (body) {
+            body.scrollTop = 0;
+        }
+        window.parent.scrollTo(0, 0);
+    </script>
+    """,
+    height=0
+)
