@@ -211,4 +211,14 @@ with tab_ai:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
             best_model = next((m for m in valid_models if 'flash' in m), valid_models[0])
-            model = genai.GenerativeModel(best_model
+            model = genai.GenerativeModel(best_model)
+            
+            system_prompt = f"Answer using ONLY this document:\n\n{raw_text}\n\nQuestion: {prompt}"
+            response = model.generate_content(system_prompt)
+            reply = response.text
+        except Exception as e:
+            reply = f"⚠️ System Error: {e}"
+
+        with st.chat_message("assistant"):
+            st.markdown(reply)
+        st.session_state.messages.append({"role": "assistant", "content": reply})
