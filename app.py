@@ -10,10 +10,10 @@ custom_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* Force rows to align left and not stretch */
+    /* Crush the gap between columns to 2px for a tight, mobile-native fit */
     div[data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
-        gap: 8px !important;
+        gap: 2px !important; /* Changed from 8px to 2px */
         margin-bottom: 6px;
         justify-content: flex-start !important; 
     }
@@ -30,20 +30,25 @@ custom_css = """
     div.stButton > button {
         height: 60px !important;
         width: 60px !important;
-        border-radius: 12px;
+        border-radius: 10px;
         border: 1px solid #d1d5db;
         padding: 0px !important;
         background-color: #ffffff;
         color: #1c1e21;
         font-size: 13px !important;
-        font-weight: 800; /* Extra bold */
+        font-weight: 800; 
         white-space: pre-wrap !important;
         line-height: 1.2;
         transition: all 0.2s;
+        margin: 0px !important; /* Kills any hidden Streamlit margins */
     }
     
     /* Active & Hover States */
-    div.stButton > button:hover { border-color: #007AFF; color: #007AFF; }
+    div.stButton > button:hover, div.stButton > button:active, div.stButton > button:focus { 
+        border-color: #007AFF; 
+        color: #007AFF; 
+        background-color: #f0f8ff;
+    }
 </style>
 """
 st.markdown(custom_css, unsafe_allow_html=True)
@@ -112,9 +117,8 @@ def render_row(days_array):
     cols = st.columns(len(days_array))
     for i, day_title in enumerate(days_array):
         try:
-            # Reformat to TUE (top) and 28 (bottom)
-            day_name = day_title.split(',')[0][:3].upper() # Extracts 'TUE'
-            date_num = re.search(r'\d+', day_title).group() # Extracts '28'
+            day_name = day_title.split(',')[0][:3].upper() 
+            date_num = re.search(r'\d+', day_title).group() 
             button_label = f"{day_name}\n{date_num}"
         except:
             button_label = f"Day\n?"
