@@ -3,53 +3,47 @@ import pandas as pd
 import google.generativeai as genai
 import re
 
-# --- 1. UI CONFIGURATION & HIGH-COMPRESSION CSS ---
+# --- 1. UI CONFIGURATION & CSS GRID OVERRIDE ---
 st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="centered")
 
 custom_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* 1. ROW COMPRESSION: Pull the 3 weeks tightly together vertically */
-    div[data-testid="stHorizontalBlock"] {
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 0px !important; 
-        padding-bottom: 0px !important;
-        margin-bottom: -15px !important; /* Aggressively kills the empty space between weeks */
+    /* THE SILVER BULLET: Override Flexbox with a rigid CSS Grid */
+    div[data-testid="stVerticalBlock"] > div > div[data-testid="stHorizontalBlock"] {
+        display: grid !important;
+        grid-template-columns: repeat(7, 1fr) !important;
+        gap: 4px !important;
+        margin-bottom: 2px !important;
     }
     
-    /* 2. THE 7-DAY SPLIT: Force exactly 1/7th width with zero padding */
+    /* Force columns to obey the grid */
     div[data-testid="column"] {
-        width: 14.28% !important; 
-        flex: 1 1 0% !important;
+        width: 100% !important; 
         min-width: 0 !important;
         padding: 0px !important; 
     }
     
-    /* 3. NAKED BUTTONS: Perfectly proportioned for an iPhone screen */
+    /* NAKED BUTTONS: Optimized for the Flag format */
     div.stButton > button {
         background-color: transparent !important;
         border: none !important;
         box-shadow: none !important;
         color: #9ca3af; 
-        height: 48px !important; /* Shorter to maintain a square/compact aspect ratio */
+        height: 65px !important; /* Slightly taller to fit the flag */
         width: 100% !important;
         padding: 0px !important;
-        font-size: 11px !important; /* Tiny native font to prevent layout breaking */
+        font-size: 11px !important; 
         font-weight: 600; 
         white-space: pre-wrap !important;
-        line-height: 1.1;
+        line-height: 1.2;
         transition: all 0.2s;
-        margin: 0px !important;
     }
     
-    /* Hover state */
-    div.stButton > button:hover { 
-        color: #1c1e21 !important; 
-    }
+    div.stButton > button:hover { color: #1c1e21 !important; }
     
-    /* 4. HIGHLIGHT STATE: Tight, rounded background behind the active day */
+    /* HIGHLIGHT STATE: Blue text, soft background */
     div.stButton > button[kind="primary"] { 
         color: #007AFF !important; 
         font-weight: 800 !important;
@@ -60,7 +54,7 @@ custom_css = """
 """
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# --- 2. BULLETPROOF DATA LOADING ---
+# --- 2. DATA LOADING & THE FLAG SCANNER ---
 @st.cache_data
 def load_data():
     try:
@@ -70,6 +64,18 @@ def load_data():
         return "Error: Itinerary file not found."
 
 raw_text = load_data()
+
+# Logic to map locations to their flags
+def get_country_flag(text_content):
+    if any(city in text_content for city in ["Lisbon", "Porto", "Sintra", "Alfama", "Portugal"]):
+        return "🇵🇹"
+    elif any(city in text_content for city in ["San Sebastián", "Oviedo", "Spain", "Basque"]):
+        return "🇪🇸"
+    elif any(city in text_content for city in ["Munich", "Germany", "Bavaria"]):
+        return "🇩🇪"
+    elif any(city in text_content for city in ["London", "UK", "England"]):
+        return "🇬🇧"
+    return "🌍" # Default travel icon if no city is found
 
 # --- 3. THE "LINE-BY-LINE" SCANNER ---
 weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -116,7 +122,6 @@ last_idx = -1
 
 for day in day_keys:
     idx = next((d_idx for d_name, d_idx in day_map.items() if d_name in day), None)
-    
     if idx is None: continue
         
     if idx <= last_idx:
@@ -146,7 +151,7 @@ map_data = {
 st.title("📱 EUROPE 2026")
 st.subheader("🗓️ Master Timeline")
 
-# Render the 7-Column Grid
+# Render the Rigid 7-Column CSS Grid
 for week in weeks:
     cols = st.columns(7)
     for i in range(7):
@@ -154,9 +159,13 @@ for week in weeks:
         with cols[i]:
             if day_title:
                 try:
+                    # Parse the date and get the flag based on the day's itinerary text
                     day_name = next(d for d in weekdays if d in day_title)[:3].upper()
                     date_num = re.search(r'\d+', day_title).group()
-                    button_label = f"{day_name}\n{date_num}"
+                    flag = get_country_flag(days_db[day_title] + day_title)
+                    
+                    # Stack: Day, Date, Flag
+                    button_label = f"{day_name}\n{date_num}\n{flag}"
                 except:
                     button_label = "Day\n?"
                     
@@ -165,16 +174,15 @@ for week in weeks:
                     st.session_state.selected_day = day_title
                     st.rerun()
             else:
-                # Ghost block exactly matching the button height to keep rows aligned
-                st.markdown("<div style='height: 48px;'></div>", unsafe_allow_html=True)
+                # Invisible spacer for empty grid slots
+                st.markdown("<div style='height: 65px;'></div>", unsafe_allow_html=True)
 
-# Extra spacer below the calendar so it doesn't collide with the HUD
-st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
+st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
 st.divider()
 
 # --- 6. THE SELECTED DAY HUD ---
 selected = st.session_state.selected_day
-st.markdown(f"### {selected}")
+st.markdown(f"### {get_country_flag(days_db[selected] + selected)} {selected}")
 st.info(f"Forecast: {get_weather(selected)}")
 
 for city, coords in map_data.items():
