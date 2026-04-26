@@ -2,42 +2,39 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 import re
+from datetime import datetime, timedelta
 
-# --- 1. UI CONFIGURATION & CUSTOM CSS ---
+# --- 1. UI CONFIGURATION & CSS ---
 st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="centered")
 
 custom_css = """
 <style>
-    #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
+    #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* Horizontal scroll container for the dates */
+    /* Force columns to stay horizontal on mobile to create the Grid */
     div[data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
-        overflow-x: auto !important;
-        -webkit-overflow-scrolling: touch;
-        padding-bottom: 10px;
-        gap: 0.4rem;
+        gap: 6px !important;
+        margin-bottom: 8px;
     }
-    
-    /* Lock width so the buttons don't crush together */
     div[data-testid="column"] {
-        min-width: 80px !important;
-        flex: 0 0 auto !important;
+        min-width: 0 !important;
+        padding: 0 !important;
     }
     
-    /* Style the calendar buttons */
+    /* Calendar Box Styling */
     div.stButton > button {
-        height: 65px;
+        height: 55px;
         width: 100%;
-        border-radius: 10px;
+        border-radius: 8px;
         border: 1px solid #d1d5db;
-        font-weight: 700;
-        font-size: 14px;
-        white-space: pre-wrap !important; /* Allows the text to stack on two lines */
+        padding: 0px !important;
+        font-size: 13px !important;
+        font-weight: bold;
+        white-space: pre-wrap !important;
         line-height: 1.2;
     }
+    div.stButton > button:hover { border-color: #007AFF; color: #007AFF; }
 </style>
 """
 st.markdown(custom_css, unsafe_allow_html=True)
@@ -47,68 +44,49 @@ st.markdown(custom_css, unsafe_allow_html=True)
 def load_data():
     try:
         with open("itinerary.md", "r", encoding="utf-8") as file:
-            # Scrub hidden Windows carriage returns that break the parser
             return file.read().replace('\r', '') 
     except FileNotFoundError:
         return "Error: Itinerary file not found."
 
 raw_text = load_data()
 
-# --- 3. THE UNBREAKABLE PARSER ---
+# --- 3. THE SMART PARSER ---
 days_db = {}
 directories_db = {}
-
-# Split the document anytime it sees a new # or ##
 sections = re.split(r'\n(?=#{1,2} )', '\n' + raw_text)
+
+weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 for section in sections:
     if not section.strip(): continue
-    
     lines = section.strip().split('\n')
-    title_line = lines[0]
+    clean_title = re.sub(r'^#{1,2}\s+', '', lines[0]).strip()
     content = '\n'.join(lines[1:]).strip()
     
-    # Clean the # symbols out of the title
-    clean_title = re.sub(r'^#{1,2}\s+', '', title_line)
-    
-    # Sort into Databases
     if 'DIRECTORY' in clean_title:
-        dir_name = clean_title.replace('📚 DIRECTORY:', '').strip()
-        directories_db[dir_name] = content
-    elif ',' in clean_title and ('–' in clean_title or '-' in clean_title or '—' in clean_title):
-        # If it has a comma and a dash, it's a daily agenda!
+        directories_db[clean_title.replace('📚 DIRECTORY:', '').strip()] = content
+    # If the title starts with a day of the week, it's a valid agenda item
+    elif any(clean_title.startswith(day) for day in weekdays):
         days_db[clean_title] = content
+
+day_keys = list(days_db.keys())
+if not day_keys:
+    st.error("⚠️ No days found. Ensure your dates start with 'Monday', 'Tuesday', etc.")
+    st.stop()
+
+if "selected_day" not in st.session_state:
+    st.session_state.selected_day = day_keys[0]
 
 # --- 4. HELPER FUNCTIONS ---
 def get_weather(location_name):
-    averages = {
-        "Lisbon": "🌤️ 82°F", "Porto": "🌤️ 78°F", 
-        "San Sebastián": "🌦️ 74°F", "Munich": "☀️ 76°F",
-        "London": "☁️ 73°F", "Oviedo": "⛅ 70°F"
-    }
-    for city, temp in averages.items():
-        if city in location_name:
-            return temp
-    return "🌤️ 75°F (Avg)"
+    return "🌤️ 78°F (Avg)" if "Lisbon" in location_name or "Porto" in location_name else "🌦️ 74°F (Avg)"
 
 map_data = {
     "Alfama": pd.DataFrame({'lat': [38.7126], 'lon': [-9.1300]}),
     "Munich": pd.DataFrame({'lat': [48.1351], 'lon': [11.5820]}),
     "San Sebastián": pd.DataFrame({'lat': [43.3183], 'lon': [-1.9812]}),
-    "Porto": pd.DataFrame({'lat': [41.1579], 'lon': [-8.6291]}),
-    "London": pd.DataFrame({'lat': [51.5072], 'lon': [-0.1276]})
+    "Porto": pd.DataFrame({'lat': [41.1579], 'lon': [-8.6291]})
 }
-
-# --- 5. INITIALIZE STATE MEMORY ---
-day_keys = list(days_db.keys())
-
-# Fallback in case the document is completely empty or corrupted
-if not day_keys:
-    st.error("⚠️ Document parsed, but no daily agendas found. Check the formatting in itinerary.md.")
-    st.stop()
-
-if "selected_day" not in st.session_state:
-    st.session_state.selected_day = day_keys[0]
 
 # ==========================================
 # UI BUILD OUT STARTS HERE
@@ -116,57 +94,59 @@ if "selected_day" not in st.session_state:
 st.title("📱 EUROPE 2026")
 st.subheader("🗓️ Master Timeline")
 
-# --- 6. THE HORIZONTAL CALENDAR STRIP ---
-cols = st.columns(len(day_keys))
+# --- 5. THE CALENDAR GRID GENERATOR ---
+# We break the day_keys array into 3 rows (Week 1 = 6 days, Week 2 = 7 days, Week 3 = remaining)
+row1_days = day_keys[0:6]
+row2_days = day_keys[6:13]
+row3_days = day_keys[13:]
 
-for i, day_title in enumerate(day_keys):
-    try:
-        # Extract the exact text for the button (e.g., "JUL 28 \n TUE")
-        date_part = re.split(r'[-–—]', day_title)[0].strip() 
-        day_name, month_date = date_part.split(', ')
-        
-        day_abbr = day_name[:3].upper()
-        month_abbr = month_date.split(' ')[0][:3].upper()
-        day_num = month_date.split(' ')[1]
-        
-        button_label = f"{month_abbr} {day_num}\n{day_abbr}"
-    except:
-        button_label = f"Day\n{i+1}"
-        
-    with cols[i]:
-        # Logic to turn the selected button solid blue
-        is_active = (day_title == st.session_state.selected_day)
-        btn_type = "primary" if is_active else "secondary"
-        
-        if st.button(button_label, key=f"btn_{i}", type=btn_type, use_container_width=True):
-            st.session_state.selected_day = day_title
-            st.rerun() # Forces the screen to instantly swap content
+def render_row(days_array):
+    if not days_array: return
+    cols = st.columns(len(days_array))
+    for i, day_title in enumerate(days_array):
+        try:
+            # Tries to extract "JUL 28 \n TUE" from "Tuesday, July 28 - Location"
+            day_name = day_title.split(',')[0][:3].upper()
+            date_num = re.search(r'\d+', day_title).group()
+            month_name = re.search(r'(July|August|Jul|Aug)', day_title).group()[:3].upper()
+            button_label = f"{month_name} {date_num}\n{day_name}"
+        except:
+            button_label = f"Day\n?"
+            
+        with cols[i]:
+            btn_type = "primary" if day_title == st.session_state.selected_day else "secondary"
+            if st.button(button_label, key=day_title, type=btn_type, use_container_width=True):
+                st.session_state.selected_day = day_title
+                st.rerun()
+
+# Render the 3 distinct rows
+render_row(row1_days)
+render_row(row2_days)
+render_row(row3_days)
 
 st.divider()
 
-# --- 7. THE SELECTED DAY HUD (Detail View) ---
+# --- 6. THE SELECTED DAY HUD ---
 selected = st.session_state.selected_day
 st.markdown(f"### {selected}")
 st.info(f"Forecast: {get_weather(selected)}")
 
-# Map Injection
 for city, coords in map_data.items():
     if city in selected or city in days_db[selected]:
         st.map(coords, zoom=12, height=150)
         break
 
-# Day Itinerary
 st.markdown(days_db[selected])
 st.divider()
 
-# --- 8. THE DIRECTORIES ---
+# --- 7. DIRECTORIES ---
 st.subheader("📂 Operations Vault")
 for dir_title, dir_content in directories_db.items():
     with st.expander(f"📁 {dir_title}", expanded=False):
         st.markdown(dir_content)
 st.divider()
 
-# --- 9. THE AI AGENT ---
+# --- 8. AI AGENT ---
 st.subheader("🤖 Agent Co-Pilot")
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -185,7 +165,7 @@ if prompt := st.chat_input("Ask a logistics question..."):
         best_model = next((m for m in valid_models if 'flash' in m), valid_models[0])
         model = genai.GenerativeModel(best_model)
         
-        system_prompt = f"You are the trip logistics director. Answer using ONLY this document:\n\n{raw_text}\n\nQuestion: {prompt}"
+        system_prompt = f"Answer using ONLY this document:\n\n{raw_text}\n\nQuestion: {prompt}"
         response = model.generate_content(system_prompt)
         reply = response.text
     except Exception as e:
