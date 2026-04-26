@@ -1,7 +1,7 @@
 import streamlit as st
-import requests
 import pandas as pd
 import google.generativeai as genai
+import re
 
 # --- 1. UI CONFIGURATION & CUSTOM CSS ---
 st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="centered")
@@ -12,58 +12,74 @@ custom_css = """
     header {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* 1. Force the columns into a horizontal, swipeable row on mobile */
+    /* Horizontal scroll container for the dates */
     div[data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
         overflow-x: auto !important;
-        -webkit-overflow-scrolling: touch; /* Smooth iOS scrolling */
-        padding-bottom: 15px; /* Space for the invisible scrollbar */
-        gap: 0.5rem;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 10px;
+        gap: 0.4rem;
     }
     
-    /* 2. Lock the width of the calendar boxes so they don't squish */
+    /* Lock width so the buttons don't crush together */
     div[data-testid="column"] {
-        min-width: 85px !important;
+        min-width: 80px !important;
         flex: 0 0 auto !important;
     }
     
-    /* 3. Style the calendar boxes (Buttons) */
+    /* Style the calendar buttons */
     div.stButton > button {
-        height: 70px;
+        height: 65px;
         width: 100%;
-        border-radius: 12px;
-        border: 1px solid #e5e7eb;
-        background-color: #ffffff;
-        color: #1c1e21;
+        border-radius: 10px;
+        border: 1px solid #d1d5db;
         font-weight: 700;
         font-size: 14px;
-        white-space: pre-wrap !important; /* Forces the newline (\n) to work */
-        line-height: 1.3;
-        transition: all 0.2s;
-    }
-    
-    /* 4. Active/Hover states for the boxes */
-    div.stButton > button:hover, div.stButton > button:active, div.stButton > button:focus {
-        border-color: #007AFF;
-        color: #007AFF;
-        background-color: #f0f8ff;
+        white-space: pre-wrap !important; /* Allows the text to stack on two lines */
+        line-height: 1.2;
     }
 </style>
 """
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# --- 2. LOAD DATA ---
+# --- 2. BULLETPROOF DATA LOADING ---
 @st.cache_data
 def load_data():
     try:
         with open("itinerary.md", "r", encoding="utf-8") as file:
-            return file.read()
+            # Scrub hidden Windows carriage returns that break the parser
+            return file.read().replace('\r', '') 
     except FileNotFoundError:
         return "Error: Itinerary file not found."
 
 raw_text = load_data()
 
-# --- 3. HELPER FUNCTIONS ---
+# --- 3. THE UNBREAKABLE PARSER ---
+days_db = {}
+directories_db = {}
+
+# Split the document anytime it sees a new # or ##
+sections = re.split(r'\n(?=#{1,2} )', '\n' + raw_text)
+
+for section in sections:
+    if not section.strip(): continue
+    
+    lines = section.strip().split('\n')
+    title_line = lines[0]
+    content = '\n'.join(lines[1:]).strip()
+    
+    # Clean the # symbols out of the title
+    clean_title = re.sub(r'^#{1,2}\s+', '', title_line)
+    
+    # Sort into Databases
+    if 'DIRECTORY' in clean_title:
+        dir_name = clean_title.replace('📚 DIRECTORY:', '').strip()
+        directories_db[dir_name] = content
+    elif ',' in clean_title and ('–' in clean_title or '-' in clean_title or '—' in clean_title):
+        # If it has a comma and a dash, it's a daily agenda!
+        days_db[clean_title] = content
+
+# --- 4. HELPER FUNCTIONS ---
 def get_weather(location_name):
     averages = {
         "Lisbon": "🌤️ 82°F", "Porto": "🌤️ 78°F", 
@@ -83,85 +99,74 @@ map_data = {
     "London": pd.DataFrame({'lat': [51.5072], 'lon': [-0.1276]})
 }
 
-# --- 4. PARSE THE DOCUMENT INTO A DATABASE ---
-sections = raw_text.split('\n# ')
-days_db = {}
-directories_db = {}
-
-for section in sections:
-    if not section.strip(): continue
-    
-    lines = section.split('\n')
-    title = lines[0].strip()
-    content = '\n'.join(lines[1:])
-    
-    if title.startswith('📚 DIRECTORY'):
-        directories_db[title.replace('📚 DIRECTORY:', '').strip()] = content
-    else:
-        days_db[title] = content
-
 # --- 5. INITIALIZE STATE MEMORY ---
 day_keys = list(days_db.keys())
-if "selected_day" not in st.session_state and len(day_keys) > 0:
-    st.session_state.selected_day = day_keys[0] 
+
+# Fallback in case the document is completely empty or corrupted
+if not day_keys:
+    st.error("⚠️ Document parsed, but no daily agendas found. Check the formatting in itinerary.md.")
+    st.stop()
+
+if "selected_day" not in st.session_state:
+    st.session_state.selected_day = day_keys[0]
 
 # ==========================================
 # UI BUILD OUT STARTS HERE
 # ==========================================
 st.title("📱 EUROPE 2026")
-
-# --- 6. THE CALENDAR GRID (Horizontal Strip) ---
 st.subheader("🗓️ Master Timeline")
 
-# Create a dynamic number of columns based on how many days are in the document
+# --- 6. THE HORIZONTAL CALENDAR STRIP ---
 cols = st.columns(len(day_keys))
 
 for i, day_title in enumerate(day_keys):
-    # Text Processing: Turn "Sunday, August 9 – The Alfama Reset" into "Aug 9 \n SUN"
     try:
-        parts = day_title.split(' – ')[0].split(', ')
-        day_word = parts[0][:3].upper() # "SUN"
+        # Extract the exact text for the button (e.g., "JUL 28 \n TUE")
+        date_part = re.split(r'[-–—]', day_title)[0].strip() 
+        day_name, month_date = date_part.split(', ')
         
-        date_parts = parts[1].split(' ')
-        month_word = date_parts[0][:3] # "Aug"
-        day_num = date_parts[1] # "9"
+        day_abbr = day_name[:3].upper()
+        month_abbr = month_date.split(' ')[0][:3].upper()
+        day_num = month_date.split(' ')[1]
         
-        button_label = f"{month_word} {day_num}\n{day_word}"
+        button_label = f"{month_abbr} {day_num}\n{day_abbr}"
     except:
-        # Fallback if the formatting in the doc is slightly off
         button_label = f"Day\n{i+1}"
-    
+        
     with cols[i]:
-        if st.button(button_label, key=f"btn_{i}"):
+        # Logic to turn the selected button solid blue
+        is_active = (day_title == st.session_state.selected_day)
+        btn_type = "primary" if is_active else "secondary"
+        
+        if st.button(button_label, key=f"btn_{i}", type=btn_type, use_container_width=True):
             st.session_state.selected_day = day_title
+            st.rerun() # Forces the screen to instantly swap content
 
 st.divider()
 
-# --- 7. THE SELECTED DAY HUD (The Detail View) ---
+# --- 7. THE SELECTED DAY HUD (Detail View) ---
 selected = st.session_state.selected_day
 st.markdown(f"### {selected}")
 st.info(f"Forecast: {get_weather(selected)}")
 
-# Render Map
+# Map Injection
 for city, coords in map_data.items():
     if city in selected or city in days_db[selected]:
         st.map(coords, zoom=12, height=150)
         break
 
-# Render the Agenda
+# Day Itinerary
 st.markdown(days_db[selected])
-
 st.divider()
 
-# --- 8. THE DIRECTORIES (Collapsible) ---
+# --- 8. THE DIRECTORIES ---
 st.subheader("📂 Operations Vault")
 for dir_title, dir_content in directories_db.items():
     with st.expander(f"📁 {dir_title}", expanded=False):
         st.markdown(dir_content)
-
 st.divider()
 
-# --- 9. THE AI AGENT (Bottom Pinned) ---
+# --- 9. THE AI AGENT ---
 st.subheader("🤖 Agent Co-Pilot")
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -181,7 +186,6 @@ if prompt := st.chat_input("Ask a logistics question..."):
         model = genai.GenerativeModel(best_model)
         
         system_prompt = f"You are the trip logistics director. Answer using ONLY this document:\n\n{raw_text}\n\nQuestion: {prompt}"
-        
         response = model.generate_content(system_prompt)
         reply = response.text
     except Exception as e:
