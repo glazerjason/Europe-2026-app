@@ -98,13 +98,22 @@ if prompt := st.chat_input("Ask about the itinerary, GF food, or logistics..."):
     # Call the LLM
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-pro')
+        
+        # 1. Ask Google what models this specific API key has access to
+        valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # 2. Automatically pick the fastest one available (Flash) or fallback to whatever is first
+        best_model = next((m for m in valid_models if 'flash' in m), valid_models[0])
+        
+        # 3. Build the brain using the exact name Google provided
+        model = genai.GenerativeModel(best_model)
         
         # We inject your actual markdown document into the system prompt!
         system_prompt = f"You are the trip logistics director. Answer the user's question using ONLY this document:\n\n{raw_text}\n\nQuestion: {prompt}"
         
         response = model.generate_content(system_prompt)
         reply = response.text
+        
     except Exception as e:
         reply = f"⚠️ System Error: {e}"
     # Show AI reply
