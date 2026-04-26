@@ -31,7 +31,7 @@ custom_css = """
         border: none !important;
         box-shadow: none !important;
         color: #9ca3af; 
-        height: 65px !important; /* Slightly taller to fit the flag */
+        height: 65px !important; 
         width: 100% !important;
         padding: 0px !important;
         font-size: 11px !important; 
@@ -65,7 +65,6 @@ def load_data():
 
 raw_text = load_data()
 
-# Logic to map locations to their flags
 def get_country_flag(text_content):
     if any(city in text_content for city in ["Lisbon", "Porto", "Sintra", "Alfama", "Portugal"]):
         return "🇵🇹"
@@ -75,7 +74,7 @@ def get_country_flag(text_content):
         return "🇩🇪"
     elif any(city in text_content for city in ["London", "UK", "England"]):
         return "🇬🇧"
-    return "🌍" # Default travel icon if no city is found
+    return "🌍"
 
 # --- 3. THE "LINE-BY-LINE" SCANNER ---
 weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -151,7 +150,6 @@ map_data = {
 st.title("📱 EUROPE 2026")
 st.subheader("🗓️ Master Timeline")
 
-# Render the Rigid 7-Column CSS Grid
 for week in weeks:
     cols = st.columns(7)
     for i in range(7):
@@ -159,12 +157,11 @@ for week in weeks:
         with cols[i]:
             if day_title:
                 try:
-                    # Parse the date and get the flag based on the day's itinerary text
-                    day_name = next(d for d in weekdays if d in day_title)[:3].upper()
+                    # FIX: Slice to [:2] for strict 2-letter days (MO, TU, WE)
+                    day_name = next(d for d in weekdays if d in day_title)[:2].upper()
                     date_num = re.search(r'\d+', day_title).group()
                     flag = get_country_flag(days_db[day_title] + day_title)
                     
-                    # Stack: Day, Date, Flag
                     button_label = f"{day_name}\n{date_num}\n{flag}"
                 except:
                     button_label = "Day\n?"
@@ -174,7 +171,6 @@ for week in weeks:
                     st.session_state.selected_day = day_title
                     st.rerun()
             else:
-                # Invisible spacer for empty grid slots
                 st.markdown("<div style='height: 65px;'></div>", unsafe_allow_html=True)
 
 st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
