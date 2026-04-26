@@ -167,4 +167,48 @@ st.divider()
 # --- 6. THE SELECTED DAY HUD ---
 selected = st.session_state.selected_day
 st.markdown(f"### {selected}")
-st.info(f
+st.info(f"Forecast: {get_weather(selected)}")
+
+for city, coords in map_data.items():
+    if city in selected or city in days_db[selected]:
+        st.map(coords, zoom=12, height=150)
+        break
+
+st.markdown(days_db[selected])
+st.divider()
+
+# --- 7. DIRECTORIES ---
+st.subheader("📂 Operations Vault")
+for dir_title, dir_content in directories_db.items():
+    with st.expander(f"📁 {dir_title}", expanded=False):
+        st.markdown(dir_content)
+st.divider()
+
+# --- 8. AI AGENT ---
+st.subheader("🤖 Agent Co-Pilot")
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+if prompt := st.chat_input("Ask a logistics question..."):
+    st.chat_message("user").markdown(prompt)
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    try:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        best_model = next((m for m in valid_models if 'flash' in m), valid_models[0])
+        model = genai.GenerativeModel(best_model)
+        
+        system_prompt = f"Answer using ONLY this document:\n\n{raw_text}\n\nQuestion: {prompt}"
+        response = model.generate_content(system_prompt)
+        reply = response.text
+    except Exception as e:
+        reply = f"⚠️ System Error: {e}"
+
+    with st.chat_message("assistant"):
+        st.markdown(reply)
+    st.session_state.messages.append({"role": "assistant", "content": reply})
