@@ -98,7 +98,7 @@ if prompt := st.chat_input("Ask about the itinerary, GF food, or logistics..."):
     # Call the LLM
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
         
         # We inject your actual markdown document into the system prompt!
         system_prompt = f"You are the trip logistics director. Answer the user's question using ONLY this document:\n\n{raw_text}\n\nQuestion: {prompt}"
