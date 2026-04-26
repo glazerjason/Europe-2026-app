@@ -10,28 +10,30 @@ custom_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* Crush the gap between columns to 2px for a tight, mobile-native fit */
+    /* 1. Kill the gap completely */
     div[data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
-        gap: 2px !important; /* Changed from 8px to 2px */
-        margin-bottom: 6px;
+        gap: 0px !important; 
+        margin-bottom: 8px;
         justify-content: flex-start !important; 
     }
     
-    /* 🛑 LOCK THE WIDTH: Force every column to be exactly 60px wide */
+    /* 2. Lock width & overlap the borders by 1px so they fuse together */
     div[data-testid="column"] {
         flex: 0 0 60px !important;
         width: 60px !important;
         min-width: 60px !important;
         padding: 0 !important;
+        margin-right: -1px !important; 
+        z-index: 0;
     }
     
-    /* 🛑 LOCK THE BUTTON: Perfect 60x60 squares */
+    /* 3. Make all boxes perfectly square on the inside edges */
     div.stButton > button {
         height: 60px !important;
-        width: 60px !important;
-        border-radius: 10px;
-        border: 1px solid #d1d5db;
+        width: 100% !important;
+        border-radius: 0px !important; 
+        border: 1px solid #d1d5db !important;
         padding: 0px !important;
         background-color: #ffffff;
         color: #1c1e21;
@@ -40,14 +42,26 @@ custom_css = """
         white-space: pre-wrap !important;
         line-height: 1.2;
         transition: all 0.2s;
-        margin: 0px !important; /* Kills any hidden Streamlit margins */
+        margin: 0px !important;
+        position: relative;
     }
     
-    /* Active & Hover States */
+    /* 4. Round ONLY the outside edges of the first and last boxes in the row */
+    div[data-testid="column"]:first-child div.stButton > button {
+        border-top-left-radius: 10px !important;
+        border-bottom-left-radius: 10px !important;
+    }
+    div[data-testid="column"]:last-child div.stButton > button {
+        border-top-right-radius: 10px !important;
+        border-bottom-right-radius: 10px !important;
+    }
+    
+    /* 5. Highlight State: Snap the blue border over the adjacent grey boxes */
     div.stButton > button:hover, div.stButton > button:active, div.stButton > button:focus { 
-        border-color: #007AFF; 
+        border-color: #007AFF !important; 
         color: #007AFF; 
         background-color: #f0f8ff;
+        z-index: 10 !important; 
     }
 </style>
 """
@@ -139,47 +153,3 @@ st.divider()
 selected = st.session_state.selected_day
 st.markdown(f"### {selected}")
 st.info(f"Forecast: {get_weather(selected)}")
-
-for city, coords in map_data.items():
-    if city in selected or city in days_db[selected]:
-        st.map(coords, zoom=12, height=150)
-        break
-
-st.markdown(days_db[selected])
-st.divider()
-
-# --- 7. DIRECTORIES ---
-st.subheader("📂 Operations Vault")
-for dir_title, dir_content in directories_db.items():
-    with st.expander(f"📁 {dir_title}", expanded=False):
-        st.markdown(dir_content)
-st.divider()
-
-# --- 8. AI AGENT ---
-st.subheader("🤖 Agent Co-Pilot")
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-if prompt := st.chat_input("Ask a logistics question..."):
-    st.chat_message("user").markdown(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    
-    try:
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        best_model = next((m for m in valid_models if 'flash' in m), valid_models[0])
-        model = genai.GenerativeModel(best_model)
-        
-        system_prompt = f"Answer using ONLY this document:\n\n{raw_text}\n\nQuestion: {prompt}"
-        response = model.generate_content(system_prompt)
-        reply = response.text
-    except Exception as e:
-        reply = f"⚠️ System Error: {e}"
-
-    with st.chat_message("assistant"):
-        st.markdown(reply)
-    st.session_state.messages.append({"role": "assistant", "content": reply})
