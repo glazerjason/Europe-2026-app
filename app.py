@@ -10,6 +10,13 @@ custom_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
+    /* 1. CRUSH TOP PADDING: Pull the app to the absolute top of the screen */
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-bottom: 0rem !important;
+        max-width: 100% !important;
+    }
+
     /* Make Tabs look like native iOS Segmented Controls */
     div[data-testid="stTabs"] > div {
         display: flex;
@@ -17,7 +24,7 @@ custom_css = """
         background-color: #f3f4f6;
         border-radius: 12px;
         padding: 4px;
-        margin-bottom: 20px;
+        margin-bottom: 15px;
     }
     button[data-baseweb="tab"] {
         flex: 1;
@@ -135,7 +142,7 @@ if any(current_week):
     weeks.append(current_week)
 
 # --- 4. THE TWO-ROOM ARCHITECTURE (Tabs) ---
-st.title("📱 EUROPE 2026")
+# NOTE: The big st.title("EUROPE 2026") was removed here so the tabs snap to the top!
 
 tab_cal, tab_ai = st.tabs(["🗓️ Timeline", "🤖 Co-Pilot"])
 
@@ -168,7 +175,10 @@ with tab_cal:
 
     # The HUD
     selected = st.session_state.selected_day
-    st.markdown(f"### {get_country_flag(days_db[selected] + selected)} {selected}")
+    
+    # Injected Title seamlessly into the HUD to save top space
+    st.markdown(f"## 📱 EUROPE 2026")
+    st.markdown(f"#### {get_country_flag(days_db[selected] + selected)} {selected}")
     st.markdown(days_db[selected])
     st.divider()
 
@@ -192,7 +202,7 @@ with tab_ai:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Chat Input (Only active when this tab is open!)
+    # Chat Input
     if prompt := st.chat_input("Ask a logistics question..."):
         st.chat_message("user").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -201,14 +211,4 @@ with tab_ai:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
             best_model = next((m for m in valid_models if 'flash' in m), valid_models[0])
-            model = genai.GenerativeModel(best_model)
-            
-            system_prompt = f"Answer using ONLY this document:\n\n{raw_text}\n\nQuestion: {prompt}"
-            response = model.generate_content(system_prompt)
-            reply = response.text
-        except Exception as e:
-            reply = f"⚠️ System Error: {e}"
-
-        with st.chat_message("assistant"):
-            st.markdown(reply)
-        st.session_state.messages.append({"role": "assistant", "content": reply})
+            model = genai.GenerativeModel(best_model
