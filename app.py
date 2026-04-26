@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 import re
-from datetime import datetime, timedelta
 
 # --- 1. UI CONFIGURATION & CSS ---
 st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="centered")
@@ -11,29 +10,39 @@ custom_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* Force columns to stay horizontal on mobile to create the Grid */
+    /* Force rows to align left and not stretch */
     div[data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
-        gap: 6px !important;
-        margin-bottom: 8px;
+        gap: 8px !important;
+        margin-bottom: 6px;
+        justify-content: flex-start !important; 
     }
+    
+    /* 🛑 LOCK THE WIDTH: Force every column to be exactly 60px wide */
     div[data-testid="column"] {
-        min-width: 0 !important;
+        flex: 0 0 60px !important;
+        width: 60px !important;
+        min-width: 60px !important;
         padding: 0 !important;
     }
     
-    /* Calendar Box Styling */
+    /* 🛑 LOCK THE BUTTON: Perfect 60x60 squares */
     div.stButton > button {
-        height: 55px;
-        width: 100%;
-        border-radius: 8px;
+        height: 60px !important;
+        width: 60px !important;
+        border-radius: 12px;
         border: 1px solid #d1d5db;
         padding: 0px !important;
+        background-color: #ffffff;
+        color: #1c1e21;
         font-size: 13px !important;
-        font-weight: bold;
+        font-weight: 800; /* Extra bold */
         white-space: pre-wrap !important;
         line-height: 1.2;
+        transition: all 0.2s;
     }
+    
+    /* Active & Hover States */
     div.stButton > button:hover { border-color: #007AFF; color: #007AFF; }
 </style>
 """
@@ -65,7 +74,6 @@ for section in sections:
     
     if 'DIRECTORY' in clean_title:
         directories_db[clean_title.replace('📚 DIRECTORY:', '').strip()] = content
-    # If the title starts with a day of the week, it's a valid agenda item
     elif any(clean_title.startswith(day) for day in weekdays):
         days_db[clean_title] = content
 
@@ -95,7 +103,6 @@ st.title("📱 EUROPE 2026")
 st.subheader("🗓️ Master Timeline")
 
 # --- 5. THE CALENDAR GRID GENERATOR ---
-# We break the day_keys array into 3 rows (Week 1 = 6 days, Week 2 = 7 days, Week 3 = remaining)
 row1_days = day_keys[0:6]
 row2_days = day_keys[6:13]
 row3_days = day_keys[13:]
@@ -105,11 +112,10 @@ def render_row(days_array):
     cols = st.columns(len(days_array))
     for i, day_title in enumerate(days_array):
         try:
-            # Tries to extract "JUL 28 \n TUE" from "Tuesday, July 28 - Location"
-            day_name = day_title.split(',')[0][:3].upper()
-            date_num = re.search(r'\d+', day_title).group()
-            month_name = re.search(r'(July|August|Jul|Aug)', day_title).group()[:3].upper()
-            button_label = f"{month_name} {date_num}\n{day_name}"
+            # Reformat to TUE (top) and 28 (bottom)
+            day_name = day_title.split(',')[0][:3].upper() # Extracts 'TUE'
+            date_num = re.search(r'\d+', day_title).group() # Extracts '28'
+            button_label = f"{day_name}\n{date_num}"
         except:
             button_label = f"Day\n?"
             
@@ -119,7 +125,6 @@ def render_row(days_array):
                 st.session_state.selected_day = day_title
                 st.rerun()
 
-# Render the 3 distinct rows
 render_row(row1_days)
 render_row(row2_days)
 render_row(row3_days)
