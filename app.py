@@ -106,8 +106,7 @@ if prompt := st.chat_input("Ask about the itinerary, GF food, or logistics..."):
         response = model.generate_content(system_prompt)
         reply = response.text
     except Exception as e:
-        reply = "⚠️ I need my API key setup in Streamlit Secrets to answer that!"
-
+        reply = f"⚠️ System Error: {e}"
     # Show AI reply
     with st.chat_message("assistant"):
         st.markdown(reply)
