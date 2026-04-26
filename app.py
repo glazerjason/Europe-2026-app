@@ -2,49 +2,61 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 import re
-import streamlit.components.v1 as components
 
-# --- 1. UI CONFIGURATION & CSS GRID OVERRIDE ---
+# --- 1. UI CONFIGURATION & CSS GRID ---
 st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="centered")
 
 custom_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* THE SILVER BULLET: Override Flexbox with a rigid CSS Grid */
+    /* Make Tabs look like native iOS Segmented Controls */
+    div[data-testid="stTabs"] > div {
+        display: flex;
+        justify-content: space-evenly;
+        background-color: #f3f4f6;
+        border-radius: 12px;
+        padding: 4px;
+        margin-bottom: 20px;
+    }
+    button[data-baseweb="tab"] {
+        flex: 1;
+        border-radius: 8px !important;
+        padding: 10px 0px !important;
+        font-weight: 700 !important;
+    }
+    button[aria-selected="true"] {
+        background-color: white !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+        color: #007AFF !important;
+    }
+    
+    /* THE CSS GRID: Rigid 7-column calendar */
     div[data-testid="stVerticalBlock"] > div > div[data-testid="stHorizontalBlock"] {
         display: grid !important;
         grid-template-columns: repeat(7, 1fr) !important;
         gap: 4px !important;
-        margin-bottom: 2px !important;
+        margin-bottom: 4px !important;
     }
     
-    /* Force columns to obey the grid */
-    div[data-testid="column"] {
-        width: 100% !important; 
-        min-width: 0 !important;
-        padding: 0px !important; 
-    }
-    
-    /* NAKED BUTTONS: Optimized for the Flag format */
+    /* Naked Calendar Buttons */
     div.stButton > button {
         background-color: transparent !important;
         border: none !important;
         box-shadow: none !important;
         color: #9ca3af; 
-        height: 65px !important; 
+        height: 60px !important; 
         width: 100% !important;
         padding: 0px !important;
         font-size: 11px !important; 
         font-weight: 600; 
         white-space: pre-wrap !important;
         line-height: 1.2;
-        transition: all 0.2s;
     }
     
     div.stButton > button:hover { color: #1c1e21 !important; }
     
-    /* HIGHLIGHT STATE: Blue text, soft background */
+    /* Active Calendar Day */
     div.stButton > button[kind="primary"] { 
         color: #007AFF !important; 
         font-weight: 800 !important;
@@ -55,7 +67,7 @@ custom_css = """
 """
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# --- 2. DATA LOADING & THE FLAG SCANNER ---
+# --- 2. DATA LOADING & FLAG SCANNER ---
 @st.cache_data
 def load_data():
     try:
@@ -77,7 +89,7 @@ def get_country_flag(text_content):
         return "🇬🇧"
     return "🌍"
 
-# --- 3. THE "LINE-BY-LINE" SCANNER ---
+# --- 3. THE SCANNER ---
 weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 days_db = {}
 directories_db = {}
@@ -85,11 +97,8 @@ current_bucket = None
 
 for line in raw_text.split('\n'):
     clean_line = line.strip()
-    is_header = clean_line.startswith('#')
-    
-    if is_header:
+    if clean_line.startswith('#'):
         header_text = re.sub(r'^#{1,2}\s+', '', clean_line).strip()
-        
         if 'DIRECTORY' in header_text:
             current_bucket = header_text.replace('📚 DIRECTORY:', '').strip()
             directories_db[current_bucket] = ""
@@ -106,16 +115,10 @@ for line in raw_text.split('\n'):
 
 day_keys = list(days_db.keys())
 
-if not day_keys:
-    st.error("⚠️ No days found. Ensure your dates start with 'Monday', 'Tuesday', etc.")
-    st.stop()
-
 if "selected_day" not in st.session_state:
     st.session_state.selected_day = day_keys[0]
 
-# --- 4. TRUE CALENDAR MATRIX GENERATOR ---
 day_map = {"Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, "Friday": 5, "Saturday": 6}
-
 weeks = []
 current_week = [None] * 7
 last_idx = -1
@@ -123,119 +126,89 @@ last_idx = -1
 for day in day_keys:
     idx = next((d_idx for d_name, d_idx in day_map.items() if d_name in day), None)
     if idx is None: continue
-        
     if idx <= last_idx:
         weeks.append(current_week)
         current_week = [None] * 7
-        
     current_week[idx] = day
     last_idx = idx
-
 if any(current_week):
     weeks.append(current_week)
 
-# --- 5. HELPER FUNCTIONS ---
-def get_weather(location_name):
-    return "🌤️ 78°F (Avg)" if "Lisbon" in location_name or "Porto" in location_name else "🌦️ 74°F (Avg)"
-
-map_data = {
-    "Alfama": pd.DataFrame({'lat': [38.7126], 'lon': [-9.1300]}),
-    "Munich": pd.DataFrame({'lat': [48.1351], 'lon': [11.5820]}),
-    "San Sebastián": pd.DataFrame({'lat': [43.3183], 'lon': [-1.9812]}),
-    "Porto": pd.DataFrame({'lat': [41.1579], 'lon': [-8.6291]})
-}
-
-# ==========================================
-# UI BUILD OUT STARTS HERE
-# ==========================================
+# --- 4. THE TWO-ROOM ARCHITECTURE (Tabs) ---
 st.title("📱 EUROPE 2026")
-st.subheader("🗓️ Master Timeline")
 
-for week in weeks:
-    cols = st.columns(7)
-    for i in range(7):
-        day_title = week[i]
-        with cols[i]:
-            if day_title:
-                try:
-                    day_name = next(d for d in weekdays if d in day_title)[:2].upper()
-                    date_num = re.search(r'\d+', day_title).group()
-                    flag = get_country_flag(days_db[day_title] + day_title)
-                    
-                    button_label = f"{day_name}\n{date_num}\n{flag}"
-                except:
-                    button_label = "Day\n?"
-                    
-                btn_type = "primary" if day_title == st.session_state.selected_day else "secondary"
-                if st.button(button_label, key=f"btn_{day_title}", type=btn_type, use_container_width=True):
-                    st.session_state.selected_day = day_title
-                    st.rerun()
-            else:
-                st.markdown("<div style='height: 65px;'></div>", unsafe_allow_html=True)
+tab_cal, tab_ai = st.tabs(["🗓️ Timeline", "🤖 Co-Pilot"])
 
-st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
-st.divider()
+# ==========================================
+# ROOM 1: THE CALENDAR (Tab 1)
+# ==========================================
+with tab_cal:
+    for week in weeks:
+        cols = st.columns(7)
+        for i in range(7):
+            day_title = week[i]
+            with cols[i]:
+                if day_title:
+                    try:
+                        day_name = next(d for d in weekdays if d in day_title)[:2].upper()
+                        date_num = re.search(r'\d+', day_title).group()
+                        flag = get_country_flag(days_db[day_title] + day_title)
+                        button_label = f"{day_name}\n{date_num}\n{flag}"
+                    except:
+                        button_label = "Day\n?"
+                        
+                    btn_type = "primary" if day_title == st.session_state.selected_day else "secondary"
+                    if st.button(button_label, key=f"btn_{day_title}", type=btn_type, use_container_width=True):
+                        st.session_state.selected_day = day_title
+                        st.rerun()
+                else:
+                    st.markdown("<div style='height: 60px;'></div>", unsafe_allow_html=True)
 
-# --- 6. THE SELECTED DAY HUD ---
-selected = st.session_state.selected_day
-st.markdown(f"### {get_country_flag(days_db[selected] + selected)} {selected}")
-st.info(f"Forecast: {get_weather(selected)}")
+    st.divider()
 
-for city, coords in map_data.items():
-    if city in selected or city in days_db[selected]:
-        st.map(coords, zoom=12, height=150)
-        break
+    # The HUD
+    selected = st.session_state.selected_day
+    st.markdown(f"### {get_country_flag(days_db[selected] + selected)} {selected}")
+    st.markdown(days_db[selected])
+    st.divider()
 
-st.markdown(days_db[selected])
-st.divider()
+    # The Directories
+    st.subheader("📂 Operations Vault")
+    for dir_title, dir_content in directories_db.items():
+        with st.expander(f"📁 {dir_title}", expanded=False):
+            st.markdown(dir_content)
 
-# --- 7. DIRECTORIES ---
-st.subheader("📂 Operations Vault")
-for dir_title, dir_content in directories_db.items():
-    with st.expander(f"📁 {dir_title}", expanded=False):
-        st.markdown(dir_content)
-st.divider()
-
-# --- 8. AI AGENT ---
-st.subheader("🤖 Agent Co-Pilot")
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-if prompt := st.chat_input("Ask a logistics question..."):
-    st.chat_message("user").markdown(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
+# ==========================================
+# ROOM 2: THE AI AGENT (Tab 2)
+# ==========================================
+with tab_ai:
+    st.subheader("🤖 Ask the Trip Director")
     
-    try:
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        best_model = next((m for m in valid_models if 'flash' in m), valid_models[0])
-        model = genai.GenerativeModel(best_model)
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Display chat history
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Chat Input (Only active when this tab is open!)
+    if prompt := st.chat_input("Ask a logistics question..."):
+        st.chat_message("user").markdown(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
         
-        system_prompt = f"Answer using ONLY this document:\n\n{raw_text}\n\nQuestion: {prompt}"
-        response = model.generate_content(system_prompt)
-        reply = response.text
-    except Exception as e:
-        reply = f"⚠️ System Error: {e}"
+        try:
+            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            best_model = next((m for m in valid_models if 'flash' in m), valid_models[0])
+            model = genai.GenerativeModel(best_model)
+            
+            system_prompt = f"Answer using ONLY this document:\n\n{raw_text}\n\nQuestion: {prompt}"
+            response = model.generate_content(system_prompt)
+            reply = response.text
+        except Exception as e:
+            reply = f"⚠️ System Error: {e}"
 
-    with st.chat_message("assistant"):
-        st.markdown(reply)
-    st.session_state.messages.append({"role": "assistant", "content": reply})
-
-# --- 9. THE SCROLL-LOCK INJECTION ---
-# This invisible script fires after the chat input renders to force the view back to the top
-components.html(
-    """
-    <script>
-        var body = window.parent.document.querySelector(".main");
-        if (body) {
-            body.scrollTop = 0;
-        }
-        window.parent.scrollTo(0, 0);
-    </script>
-    """,
-    height=0
-)
+        with st.chat_message("assistant"):
+            st.markdown(reply)
+        st.session_state.messages.append({"role": "assistant", "content": reply})
