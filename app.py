@@ -3,33 +3,81 @@ import pandas as pd
 import google.generativeai as genai
 import re
 
-# --- 1. UI CONFIGURATION (Now using 'wide' to kill default margins) ---
+# --- 1. UI CONFIGURATION ---
 st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="wide")
 
 custom_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* 1. ABSOLUTE CENTERING: Force the app to act like a mobile screen, perfectly centered */
+    /* 1. ABSOLUTE CENTERING */
     .block-container {
         padding-top: 1.5rem !important;
         padding-bottom: 0rem !important;
         padding-left: 1rem !important;
         padding-right: 1rem !important;
-        max-width: 600px !important; /* Keeps it phone-sized even on desktop */
-        margin: 0 auto !important;   /* Dead-center alignment */
+        max-width: 600px !important; 
+        margin: 0 auto !important;   
     }
     
-    /* 2. THE CSS GRID: Rigid 7-column calendar. (Removed width:100% to stop the rightward shift!) */
+    /* 2. THE MASTER 14-COLUMN GRID (Lowest Common Multiple of 2 and 7) */
     div[data-testid="stVerticalBlock"] > div > div[data-testid="stHorizontalBlock"] {
         display: grid !important;
-        grid-template-columns: repeat(7, 1fr) !important;
+        grid-template-columns: repeat(14, 1fr) !important;
         gap: 4px !important;
         margin-bottom: 4px !important;
     }
     
-    /* 3. Naked Calendar Buttons */
-    div.stButton > button {
+    div[data-testid="column"] {
+        min-width: 0 !important; /* Prevents text from breaking the grid */
+    }
+
+    /* =========================================================
+       3. THE MODE TOGGLE (Automatically spans 7 slots each = 50/50 split)
+       ========================================================= */
+    div[data-testid="column"]:first-child:nth-last-child(2),
+    div[data-testid="column"]:first-child:nth-last-child(2) ~ div[data-testid="column"] {
+        grid-column: span 7 !important;
+    }
+    
+    /* Toggle Button Styling (Horizontal Pills) */
+    div[data-testid="column"]:first-child:nth-last-child(2) div.stButton > button,
+    div[data-testid="column"]:first-child:nth-last-child(2) ~ div[data-testid="column"] div.stButton > button {
+        height: 40px !important; 
+        border-radius: 20px !important; 
+        font-weight: 700 !important;
+        font-size: 14px !important;
+        border: 1px solid #d1d5db !important;
+        background-color: #ffffff !important;
+        color: #1c1e21 !important;
+        display: flex !important;
+        flex-direction: row !important; /* Forces side-by-side icon and text */
+        align-items: center !important;
+        justify-content: center !important;
+        transition: all 0.2s;
+        width: 100% !important;
+    }
+    
+    /* Active Toggle State */
+    div[data-testid="column"]:first-child:nth-last-child(2) div.stButton > button[kind="primary"],
+    div[data-testid="column"]:first-child:nth-last-child(2) ~ div[data-testid="column"] div.stButton > button[kind="primary"] {
+        background-color: #007AFF !important;
+        color: white !important;
+        border-color: #007AFF !important;
+        box-shadow: 0 2px 5px rgba(0,122,255,0.3) !important;
+    }
+
+    /* =========================================================
+       4. THE CALENDAR GRID (Automatically spans 2 slots each = 1/7th split)
+       ========================================================= */
+    div[data-testid="column"]:first-child:nth-last-child(7),
+    div[data-testid="column"]:first-child:nth-last-child(7) ~ div[data-testid="column"] {
+        grid-column: span 2 !important;
+    }
+    
+    /* Naked Calendar Button Styling (Stacked Squares) */
+    div[data-testid="column"]:first-child:nth-last-child(7) div.stButton > button,
+    div[data-testid="column"]:first-child:nth-last-child(7) ~ div[data-testid="column"] div.stButton > button {
         background-color: transparent !important;
         border: none !important;
         box-shadow: none !important;
@@ -41,19 +89,22 @@ custom_css = """
         font-weight: 600; 
         white-space: pre-wrap !important;
         line-height: 1.2;
-        
-        /* Forces the text/flag to stay perfectly centered in the button */
         display: flex !important;
-        flex-direction: column !important;
+        flex-direction: column !important; /* Stacked text and flag */
         align-items: center !important;
         justify-content: center !important;
         text-align: center !important;
     }
     
-    div.stButton > button:hover { color: #1c1e21 !important; }
+    /* Calendar Hover State */
+    div[data-testid="column"]:first-child:nth-last-child(7) div.stButton > button:hover,
+    div[data-testid="column"]:first-child:nth-last-child(7) ~ div[data-testid="column"] div.stButton > button:hover { 
+        color: #1c1e21 !important; 
+    }
     
-    /* 4. Active Calendar Day & Active Toggle Button */
-    div.stButton > button[kind="primary"] { 
+    /* Active Calendar Day State */
+    div[data-testid="column"]:first-child:nth-last-child(7) div.stButton > button[kind="primary"],
+    div[data-testid="column"]:first-child:nth-last-child(7) ~ div[data-testid="column"] div.stButton > button[kind="primary"] { 
         color: #007AFF !important; 
         font-weight: 800 !important;
         background-color: #eff6ff !important;
