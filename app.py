@@ -3,65 +3,124 @@ import pandas as pd
 import google.generativeai as genai
 import re
 
-# --- 1. UI CONFIGURATION (Now using 'wide' to kill default margins) ---
+# --- 1. UI CONFIGURATION ---
 st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="wide")
 
-custom_css = """
+# Core CSS: Centering and the Mode Toggle
+core_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* 1. ABSOLUTE CENTERING: Force the app to act like a mobile screen, perfectly centered */
+    /* 1. ABSOLUTE CENTERING */
     .block-container {
         padding-top: 1.5rem !important;
         padding-bottom: 0rem !important;
         padding-left: 1rem !important;
         padding-right: 1rem !important;
-        max-width: 600px !important; /* Keeps it phone-sized even on desktop */
-        margin: 0 auto !important;   /* Dead-center alignment */
+        max-width: 600px !important; 
+        margin: 0 auto !important;   
     }
     
-    /* 2. THE CSS GRID: Rigid 7-column calendar. (Removed width:100% to stop the rightward shift!) */
-    div[data-testid="stVerticalBlock"] > div > div[data-testid="stHorizontalBlock"] {
-        display: grid !important;
-        grid-template-columns: repeat(7, 1fr) !important;
-        gap: 4px !important;
-        margin-bottom: 4px !important;
-    }
-    
-    /* 3. Naked Calendar Buttons */
-    div.stButton > button {
-        background-color: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        color: #9ca3af; 
-        height: 60px !important; 
-        width: 100% !important;
-        padding: 0px !important;
-        font-size: 11px !important; 
-        font-weight: 600; 
-        white-space: pre-wrap !important;
-        line-height: 1.2;
-        
-        /* Forces the text/flag to stay perfectly centered in the button */
+    /* =========================================================
+       2. THE MODE TOGGLE (Strictly targets the 1st Row ONLY) 
+       ========================================================= */
+    div[data-testid="stHorizontalBlock"]:nth-of-type(1) {
         display: flex !important;
-        flex-direction: column !important;
+        flex-direction: row !important;
+        margin-bottom: 20px !important;
+        gap: 10px !important;
+    }
+    
+    /* Force the 2 toggle columns to be exactly 50% wide */
+    div[data-testid="stHorizontalBlock"]:nth-of-type(1) div[data-testid="column"] {
+        width: 50% !important;
+        flex: 1 1 50% !important;
+        min-width: 0 !important;
+    }
+    
+    /* The Horizontal Pill Buttons */
+    div[data-testid="stHorizontalBlock"]:nth-of-type(1) div.stButton > button {
+        height: 40px !important; 
+        border-radius: 20px !important; 
+        font-weight: 700 !important;
+        font-size: 14px !important;
+        border: 1px solid #d1d5db !important;
+        background-color: #ffffff !important;
+        color: #1c1e21 !important;
+        display: flex !important;
+        flex-direction: row !important; /* Forces side-by-side text */
         align-items: center !important;
         justify-content: center !important;
-        text-align: center !important;
+        transition: all 0.2s;
     }
     
-    div.stButton > button:hover { color: #1c1e21 !important; }
-    
-    /* 4. Active Calendar Day & Active Toggle Button */
-    div.stButton > button[kind="primary"] { 
-        color: #007AFF !important; 
-        font-weight: 800 !important;
-        background-color: #eff6ff !important;
-        border-radius: 8px !important;
+    div[data-testid="stHorizontalBlock"]:nth-of-type(1) div.stButton > button[kind="primary"] {
+        background-color: #007AFF !important;
+        color: white !important;
+        border-color: #007AFF !important;
+        box-shadow: 0 2px 5px rgba(0,122,255,0.3) !important;
     }
 </style>
 """
-st.markdown(custom_css, unsafe_allow_html=True)
+st.markdown(core_css, unsafe_allow_html=True)
+
+# --- INITIALIZE STATE MEMORY BEFORE CSS INJECTION ---
+if "app_mode" not in st.session_state:
+    st.session_state.app_mode = "Timeline" 
+
+# FIREWALL: Only inject the Calendar Grid CSS if the Timeline is active!
+if st.session_state.app_mode == "Timeline":
+    calendar_css = """
+    <style>
+        /* =========================================================
+           3. THE CALENDAR GRID (Targets Rows 2 and beyond) 
+           ========================================================= */
+        div[data-testid="stHorizontalBlock"]:nth-of-type(n+2) {
+            display: grid !important;
+            grid-template-columns: repeat(7, 1fr) !important;
+            gap: 4px !important;
+            margin-bottom: 4px !important;
+        }
+        
+        div[data-testid="stHorizontalBlock"]:nth-of-type(n+2) div[data-testid="column"] {
+            width: 100% !important;
+            min-width: 0 !important;
+            padding: 0 !important;
+        }
+        
+        /* The Naked 60px Calendar Buttons */
+        div[data-testid="stHorizontalBlock"]:nth-of-type(n+2) div.stButton > button {
+            background-color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: #9ca3af; 
+            height: 60px !important; 
+            width: 100% !important;
+            padding: 0px !important;
+            font-size: 11px !important; 
+            font-weight: 600; 
+            white-space: pre-wrap !important;
+            line-height: 1.2;
+            display: flex !important;
+            flex-direction: column !important; /* Stacked text and flag */
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+        }
+        
+        div[data-testid="stHorizontalBlock"]:nth-of-type(n+2) div.stButton > button:hover { 
+            color: #1c1e21 !important; 
+        }
+        
+        div[data-testid="stHorizontalBlock"]:nth-of-type(n+2) div.stButton > button[kind="primary"] { 
+            color: #007AFF !important; 
+            font-weight: 800 !important;
+            background-color: #eff6ff !important;
+            border-radius: 8px !important;
+        }
+    </style>
+    """
+    st.markdown(calendar_css, unsafe_allow_html=True)
 
 # --- 2. DATA LOADING & FLAG SCANNER ---
 @st.cache_data
@@ -85,7 +144,7 @@ def get_country_flag(text_content):
         return "🇬🇧"
     return "🌍"
 
-# --- 3. THE SCANNER ---
+# --- 3. THE SCANNER (100% UNTOUCHED FROM YOUR WORKING CODE) ---
 weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 days_db = {}
 directories_db = {}
@@ -111,12 +170,8 @@ for line in raw_text.split('\n'):
 
 day_keys = list(days_db.keys())
 
-# --- INITIALIZE STATE MEMORY ---
 if "selected_day" not in st.session_state:
     st.session_state.selected_day = day_keys[0] if day_keys else None
-
-if "app_mode" not in st.session_state:
-    st.session_state.app_mode = "Timeline" # Defaults to the Calendar view
 
 day_map = {"Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, "Friday": 5, "Saturday": 6}
 weeks = []
@@ -138,7 +193,7 @@ if any(current_week):
 # UI BUILD OUT STARTS HERE
 # ==========================================
 
-# --- 4. THE CUSTOM MODE TOGGLE (Completely disconnected from the layout engine) ---
+# --- 4. THE CUSTOM MODE TOGGLE (Row 1) ---
 toggle_cols = st.columns(2)
 with toggle_cols[0]:
     if st.button("🗓️ Timeline", use_container_width=True, type="primary" if st.session_state.app_mode == "Timeline" else "secondary"):
@@ -161,7 +216,7 @@ if st.session_state.app_mode == "Timeline":
     if selected:
         st.markdown(f"#### {get_country_flag(days_db[selected] + selected)} {selected}")
     
-    # 2. The 3-Row Calendar Matrix
+    # 2. The 3-Row Calendar Matrix (Rows 2+)
     for week in weeks:
         cols = st.columns(7)
         for i in range(7):
