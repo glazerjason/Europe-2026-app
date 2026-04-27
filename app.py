@@ -3,33 +3,66 @@ import pandas as pd
 import google.generativeai as genai
 import re
 
-# --- 1. UI CONFIGURATION (Now using 'wide' to kill default margins) ---
+# --- 1. UI CONFIGURATION ---
 st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="wide")
 
 custom_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* 1. ABSOLUTE CENTERING: Force the app to act like a mobile screen, perfectly centered */
+    /* 1. ABSOLUTE CENTERING */
     .block-container {
         padding-top: 1.5rem !important;
         padding-bottom: 0rem !important;
         padding-left: 1rem !important;
         padding-right: 1rem !important;
-        max-width: 600px !important; /* Keeps it phone-sized even on desktop */
-        margin: 0 auto !important;   /* Dead-center alignment */
+        max-width: 600px !important; 
+        margin: 0 auto !important;   
     }
     
-    /* 2. THE CSS GRID: Rigid 7-column calendar. (Removed width:100% to stop the rightward shift!) */
-    div[data-testid="stVerticalBlock"] > div > div[data-testid="stHorizontalBlock"] {
+    /* =========================================================
+       2. THE MODE TOGGLE (Only targets the FIRST row of columns) 
+       ========================================================= */
+    div[data-testid="stHorizontalBlock"]:first-of-type {
+        margin-bottom: 20px !important;
+        gap: 10px !important;
+    }
+    
+    div[data-testid="stHorizontalBlock"]:first-of-type div.stButton > button {
+        height: 40px !important; /* Shorter, horizontal profile */
+        border-radius: 20px !important; /* Smooth pill shape */
+        font-weight: 700 !important;
+        font-size: 14px !important;
+        border: 1px solid #d1d5db !important;
+        background-color: #ffffff !important;
+        color: #1c1e21 !important;
+        display: flex !important;
+        flex-direction: row !important; /* Side-by-side icon and text */
+        align-items: center !important;
+        justify-content: center !important;
+        transition: all 0.2s;
+    }
+    
+    /* Active Toggle State */
+    div[data-testid="stHorizontalBlock"]:first-of-type div.stButton > button[kind="primary"] {
+        background-color: #007AFF !important;
+        color: white !important;
+        border-color: #007AFF !important;
+        box-shadow: 0 2px 5px rgba(0,122,255,0.3) !important;
+    }
+
+    /* =========================================================
+       3. THE CALENDAR GRID (Targets all rows AFTER the toggle) 
+       ========================================================= */
+    div[data-testid="stHorizontalBlock"]:not(:first-of-type) {
         display: grid !important;
         grid-template-columns: repeat(7, 1fr) !important;
         gap: 4px !important;
         margin-bottom: 4px !important;
     }
     
-    /* 3. Naked Calendar Buttons */
-    div.stButton > button {
+    /* Naked Calendar Buttons */
+    div[data-testid="stHorizontalBlock"]:not(:first-of-type) div.stButton > button {
         background-color: transparent !important;
         border: none !important;
         box-shadow: none !important;
@@ -41,19 +74,19 @@ custom_css = """
         font-weight: 600; 
         white-space: pre-wrap !important;
         line-height: 1.2;
-        
-        /* Forces the text/flag to stay perfectly centered in the button */
         display: flex !important;
-        flex-direction: column !important;
+        flex-direction: column !important; /* Stacked text and flag */
         align-items: center !important;
         justify-content: center !important;
         text-align: center !important;
     }
     
-    div.stButton > button:hover { color: #1c1e21 !important; }
+    div[data-testid="stHorizontalBlock"]:not(:first-of-type) div.stButton > button:hover { 
+        color: #1c1e21 !important; 
+    }
     
-    /* 4. Active Calendar Day & Active Toggle Button */
-    div.stButton > button[kind="primary"] { 
+    /* Active Calendar Day */
+    div[data-testid="stHorizontalBlock"]:not(:first-of-type) div.stButton > button[kind="primary"] { 
         color: #007AFF !important; 
         font-weight: 800 !important;
         background-color: #eff6ff !important;
@@ -116,7 +149,7 @@ if "selected_day" not in st.session_state:
     st.session_state.selected_day = day_keys[0] if day_keys else None
 
 if "app_mode" not in st.session_state:
-    st.session_state.app_mode = "Timeline" # Defaults to the Calendar view
+    st.session_state.app_mode = "Timeline" 
 
 day_map = {"Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, "Friday": 5, "Saturday": 6}
 weeks = []
@@ -138,7 +171,7 @@ if any(current_week):
 # UI BUILD OUT STARTS HERE
 # ==========================================
 
-# --- 4. THE CUSTOM MODE TOGGLE (Completely disconnected from the layout engine) ---
+# --- 4. THE CUSTOM MODE TOGGLE ---
 toggle_cols = st.columns(2)
 with toggle_cols[0]:
     if st.button("🗓️ Timeline", use_container_width=True, type="primary" if st.session_state.app_mode == "Timeline" else "secondary"):
@@ -149,19 +182,15 @@ with toggle_cols[1]:
         st.session_state.app_mode = "Agent"
         st.rerun()
 
-st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
-
 # ==========================================
-# ROOM 1: THE CALENDAR (Rendered only if Timeline is selected)
+# ROOM 1: THE CALENDAR
 # ==========================================
 if st.session_state.app_mode == "Timeline":
-    # 1. The HUD Header (Title & Current Day)
     selected = st.session_state.selected_day
     st.markdown(f"## 📱 EUROPE 2026")
     if selected:
         st.markdown(f"#### {get_country_flag(days_db[selected] + selected)} {selected}")
     
-    # 2. The 3-Row Calendar Matrix
     for week in weeks:
         cols = st.columns(7)
         for i in range(7):
@@ -185,19 +214,17 @@ if st.session_state.app_mode == "Timeline":
 
     st.divider()
 
-    # 3. The Selected Day's Itinerary
     if selected:
         st.markdown(days_db[selected])
     st.divider()
 
-    # 4. The Directories
     st.subheader("📂 Operations Vault")
     for dir_title, dir_content in directories_db.items():
         with st.expander(f"📁 {dir_title}", expanded=False):
             st.markdown(dir_content)
 
 # ==========================================
-# ROOM 2: THE AI AGENT (Rendered only if Co-Pilot is selected)
+# ROOM 2: THE AI AGENT
 # ==========================================
 elif st.session_state.app_mode == "Agent":
     st.markdown(f"## 🤖 Agent Co-Pilot")
