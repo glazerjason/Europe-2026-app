@@ -10,10 +10,12 @@ custom_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* 1. CRUSH TOP PADDING: Pull the app to the absolute top of the screen */
+    /* 1. PERFECT CENTERING: Force balanced left/right padding so the app doesn't drift right */
     .block-container {
         padding-top: 1.5rem !important;
         padding-bottom: 0rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
         max-width: 100% !important;
     }
 
@@ -44,9 +46,10 @@ custom_css = """
         grid-template-columns: repeat(7, 1fr) !important;
         gap: 4px !important;
         margin-bottom: 4px !important;
+        width: 100% !important;
     }
     
-    /* Naked Calendar Buttons */
+    /* Naked Calendar Buttons - Now Forced Dead Center */
     div.stButton > button {
         background-color: transparent !important;
         border: none !important;
@@ -59,6 +62,13 @@ custom_css = """
         font-weight: 600; 
         white-space: pre-wrap !important;
         line-height: 1.2;
+        
+        /* Forces the text/flag to stay perfectly centered in the button */
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-align: center !important;
     }
     
     div.stButton > button:hover { color: #1c1e21 !important; }
@@ -142,8 +152,6 @@ if any(current_week):
     weeks.append(current_week)
 
 # --- 4. THE TWO-ROOM ARCHITECTURE (Tabs) ---
-# NOTE: The big st.title("EUROPE 2026") was removed here so the tabs snap to the top!
-
 tab_cal, tab_ai = st.tabs(["🗓️ Timeline", "🤖 Co-Pilot"])
 
 # ==========================================
@@ -176,7 +184,6 @@ with tab_cal:
     # The HUD
     selected = st.session_state.selected_day
     
-    # Injected Title seamlessly into the HUD to save top space
     st.markdown(f"## 📱 EUROPE 2026")
     st.markdown(f"#### {get_country_flag(days_db[selected] + selected)} {selected}")
     st.markdown(days_db[selected])
@@ -197,12 +204,10 @@ with tab_ai:
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display chat history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Chat Input
     if prompt := st.chat_input("Ask a logistics question..."):
         st.chat_message("user").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
