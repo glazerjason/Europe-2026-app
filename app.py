@@ -3,14 +3,14 @@ import pandas as pd
 import google.generativeai as genai
 import re
 
-# --- 1. UI CONFIGURATION (Now using 'wide' to kill default margins) ---
+# --- 1. UI CONFIGURATION (Using 'wide' to kill default margins) ---
 st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="wide")
 
 custom_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* 1. ABSOLUTE CENTERING: Force the app to act like a mobile screen, perfectly centered */
+    /* 1. ABSOLUTE CENTERING */
     .block-container {
         padding-top: 1.5rem !important;
         padding-bottom: 0rem !important;
@@ -20,75 +20,55 @@ custom_css = """
         margin: 0 auto !important;   
     }
     
-    /* =========================================================
-       2. THE MODE TOGGLE (Automatically detects 2-column rows) 
-       ========================================================= */
-    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(2):last-child) {
+    /* 2. ANTI-STACKING: Force Streamlit columns to stay horizontal on mobile */
+    div[data-testid="stHorizontalBlock"] {
         display: flex !important;
-        margin-bottom: 20px !important;
-        gap: 10px !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        gap: 6px !important; /* Clean gap between all buttons */
+        margin-bottom: 8px !important;
     }
     
-    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(2):last-child) div.stButton > button {
-        height: 40px !important; 
-        border-radius: 20px !important; 
-        font-weight: 700 !important;
-        font-size: 14px !important;
-        border: 1px solid #d1d5db !important;
-        background-color: #ffffff !important;
-        color: #1c1e21 !important;
-        display: flex !important;
-        flex-direction: row !important; /* Side-by-side text */
-        align-items: center !important;
-        justify-content: center !important;
-        transition: all 0.2s;
-    }
-    
-    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(2):last-child) div.stButton > button[kind="primary"] {
-        background-color: #007AFF !important;
-        color: white !important;
-        border-color: #007AFF !important;
-        box-shadow: 0 2px 5px rgba(0,122,255,0.3) !important;
+    /* Allow narrow calendar columns to shrink below minimums on small screens */
+    div[data-testid="column"] {
+        min-width: 0 !important;
+        padding: 0 !important;
     }
 
-    /* =========================================================
-       3. THE CALENDAR GRID (Automatically detects 7-column rows) 
-       ========================================================= */
-    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(7)) {
-        display: grid !important;
-        grid-template-columns: repeat(7, 1fr) !important;
-        gap: 4px !important;
-        margin-bottom: 4px !important;
-    }
-    
-    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(7)) div.stButton > button {
-        background-color: transparent !important;
-        border: none !important;
+    /* 3. UNIVERSAL BUTTON STYLING (Auto-adjusts for Toggle vs Calendar) */
+    div.stButton > button {
+        background-color: #ffffff !important;
+        border: 1px solid #d1d5db !important;
+        border-radius: 12px !important; 
         box-shadow: none !important;
-        color: #9ca3af; 
-        height: 60px !important; 
+        color: #1c1e21 !important; 
         width: 100% !important;
-        padding: 0px !important;
-        font-size: 11px !important; 
-        font-weight: 600; 
-        white-space: pre-wrap !important;
-        line-height: 1.2;
+        min-height: 48px !important; /* Shorter base height for the 2-button toggle */
+        padding: 6px 2px !important;
+        font-size: 13px !important; 
+        font-weight: 700 !important; 
+        white-space: pre-wrap !important; /* Allows the \n to stack the Calendar text natively */
+        line-height: 1.2 !important;
+        
+        /* Flexbox centers the text vertically and horizontally */
         display: flex !important;
-        flex-direction: column !important; /* Stacked text */
+        flex-direction: column !important; 
         align-items: center !important;
         justify-content: center !important;
         text-align: center !important;
+        transition: all 0.2s;
     }
     
-    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(7)) div.stButton > button:hover { 
-        color: #1c1e21 !important; 
+    div.stButton > button:hover { 
+        border-color: #9ca3af !important; 
     }
     
-    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(7)) div.stButton > button[kind="primary"] { 
+    /* Active State (Blue Highlight for Mode Toggle AND Calendar Day) */
+    div.stButton > button[kind="primary"] { 
         color: #007AFF !important; 
         font-weight: 800 !important;
         background-color: #eff6ff !important;
-        border-radius: 8px !important;
+        border-color: #007AFF !important;
     }
 </style>
 """
@@ -116,7 +96,7 @@ def get_country_flag(text_content):
         return "🇬🇧"
     return "🌍"
 
-# --- 3. THE SCANNER ---
+# --- 3. THE PARSER (100% UNTOUCHED FROM YOUR WORKING CODE) ---
 weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 days_db = {}
 directories_db = {}
@@ -169,7 +149,7 @@ if any(current_week):
 # UI BUILD OUT STARTS HERE
 # ==========================================
 
-# --- 4. THE CUSTOM MODE TOGGLE (Completely disconnected from the layout engine) ---
+# --- 4. THE MODE TOGGLE ---
 toggle_cols = st.columns(2)
 with toggle_cols[0]:
     if st.button("🗓️ Timeline", use_container_width=True, type="primary" if st.session_state.app_mode == "Timeline" else "secondary"):
@@ -183,16 +163,16 @@ with toggle_cols[1]:
 st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
 
 # ==========================================
-# ROOM 1: THE CALENDAR (Rendered only if Timeline is selected)
+# ROOM 1: THE CALENDAR
 # ==========================================
 if st.session_state.app_mode == "Timeline":
-    # 1. The HUD Header (Title & Current Day)
+    # 1. The HUD Header
     selected = st.session_state.selected_day
     st.markdown(f"## 📱 EUROPE 2026")
     if selected:
         st.markdown(f"#### {get_country_flag(days_db[selected] + selected)} {selected}")
     
-    # 2. The 3-Row Calendar Matrix
+    # 2. The Calendar Matrix (100% Untouched logic)
     for week in weeks:
         cols = st.columns(7)
         for i in range(7):
@@ -216,46 +196,6 @@ if st.session_state.app_mode == "Timeline":
 
     st.divider()
 
-    # 3. The Selected Day's Itinerary
+    # 3. The Itinerary Details
     if selected:
-        st.markdown(days_db[selected])
-    st.divider()
-
-    # 4. The Directories
-    st.subheader("📂 Operations Vault")
-    for dir_title, dir_content in directories_db.items():
-        with st.expander(f"📁 {dir_title}", expanded=False):
-            st.markdown(dir_content)
-
-# ==========================================
-# ROOM 2: THE AI AGENT (Rendered only if Co-Pilot is selected)
-# ==========================================
-elif st.session_state.app_mode == "Agent":
-    st.markdown(f"## 🤖 Agent Co-Pilot")
-    
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    if prompt := st.chat_input("Ask a logistics question..."):
-        st.chat_message("user").markdown(prompt)
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        try:
-            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            best_model = next((m for m in valid_models if 'flash' in m), valid_models[0])
-            model = genai.GenerativeModel(best_model)
-            
-            system_prompt = f"Answer using ONLY this document:\n\n{raw_text}\n\nQuestion: {prompt}"
-            response = model.generate_content(system_prompt)
-            reply = response.text
-        except Exception as e:
-            reply = f"⚠️ System Error: {e}"
-
-        with st.chat_message("assistant"):
-            st.markdown(reply)
-        st.session_state.messages.append({"role": "assistant", "content": reply})
+        st.markdown(days
