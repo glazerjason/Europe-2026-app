@@ -3,10 +3,11 @@ import pandas as pd
 import google.generativeai as genai
 import re
 
-# --- 1. UI CONFIGURATION ---
+# --- 1. CORE UI CONFIGURATION ---
 st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="wide")
 
-custom_css = """
+# This CSS applies to the whole app (Centering & Mode Toggle)
+core_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
@@ -20,81 +21,83 @@ custom_css = """
         margin: 0 auto !important;   
     }
     
-    /* =========================================================
-       2. THE MODE TOGGLE (Only targets the FIRST row of columns) 
-       ========================================================= */
+    /* 2. THE MODE TOGGLE */
     div[data-testid="stHorizontalBlock"]:first-of-type {
         margin-bottom: 20px !important;
         gap: 10px !important;
     }
     
     div[data-testid="stHorizontalBlock"]:first-of-type div.stButton > button {
-        height: 40px !important; /* Shorter, horizontal profile */
-        border-radius: 20px !important; /* Smooth pill shape */
+        height: 40px !important; 
+        border-radius: 20px !important; 
         font-weight: 700 !important;
         font-size: 14px !important;
         border: 1px solid #d1d5db !important;
         background-color: #ffffff !important;
         color: #1c1e21 !important;
         display: flex !important;
-        flex-direction: row !important; /* Side-by-side icon and text */
         align-items: center !important;
         justify-content: center !important;
         transition: all 0.2s;
     }
     
-    /* Active Toggle State */
     div[data-testid="stHorizontalBlock"]:first-of-type div.stButton > button[kind="primary"] {
         background-color: #007AFF !important;
         color: white !important;
         border-color: #007AFF !important;
         box-shadow: 0 2px 5px rgba(0,122,255,0.3) !important;
     }
-
-    /* =========================================================
-       3. THE CALENDAR GRID (Targets all rows AFTER the toggle) 
-       ========================================================= */
-    div[data-testid="stHorizontalBlock"]:not(:first-of-type) {
-        display: grid !important;
-        grid-template-columns: repeat(7, 1fr) !important;
-        gap: 4px !important;
-        margin-bottom: 4px !important;
-    }
-    
-    /* Naked Calendar Buttons */
-    div[data-testid="stHorizontalBlock"]:not(:first-of-type) div.stButton > button {
-        background-color: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        color: #9ca3af; 
-        height: 60px !important; 
-        width: 100% !important;
-        padding: 0px !important;
-        font-size: 11px !important; 
-        font-weight: 600; 
-        white-space: pre-wrap !important;
-        line-height: 1.2;
-        display: flex !important;
-        flex-direction: column !important; /* Stacked text and flag */
-        align-items: center !important;
-        justify-content: center !important;
-        text-align: center !important;
-    }
-    
-    div[data-testid="stHorizontalBlock"]:not(:first-of-type) div.stButton > button:hover { 
-        color: #1c1e21 !important; 
-    }
-    
-    /* Active Calendar Day */
-    div[data-testid="stHorizontalBlock"]:not(:first-of-type) div.stButton > button[kind="primary"] { 
-        color: #007AFF !important; 
-        font-weight: 800 !important;
-        background-color: #eff6ff !important;
-        border-radius: 8px !important;
-    }
 </style>
 """
-st.markdown(custom_css, unsafe_allow_html=True)
+st.markdown(core_css, unsafe_allow_html=True)
+
+# --- INITIALIZE STATE MEMORY BEFORE CSS INJECTION ---
+if "app_mode" not in st.session_state:
+    st.session_state.app_mode = "Timeline" 
+
+# FIREWALL: Only inject the Calendar Grid CSS if the Timeline is active!
+if st.session_state.app_mode == "Timeline":
+    calendar_css = """
+    <style>
+        div[data-testid="stHorizontalBlock"]:not(:first-of-type) {
+            display: grid !important;
+            grid-template-columns: repeat(7, 1fr) !important;
+            gap: 4px !important;
+            margin-bottom: 4px !important;
+        }
+        
+        div[data-testid="stHorizontalBlock"]:not(:first-of-type) div.stButton > button {
+            background-color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: #9ca3af; 
+            height: 60px !important; 
+            width: 100% !important;
+            padding: 0px !important;
+            font-size: 11px !important; 
+            font-weight: 600; 
+            white-space: pre-wrap !important;
+            line-height: 1.2;
+            display: flex !important;
+            flex-direction: column !important; 
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+        }
+        
+        div[data-testid="stHorizontalBlock"]:not(:first-of-type) div.stButton > button:hover { 
+            color: #1c1e21 !important; 
+        }
+        
+        div[data-testid="stHorizontalBlock"]:not(:first-of-type) div.stButton > button[kind="primary"] { 
+            color: #007AFF !important; 
+            font-weight: 800 !important;
+            background-color: #eff6ff !important;
+            border-radius: 8px !important;
+        }
+    </style>
+    """
+    st.markdown(calendar_css, unsafe_allow_html=True)
 
 # --- 2. DATA LOADING & FLAG SCANNER ---
 @st.cache_data
@@ -118,39 +121,42 @@ def get_country_flag(text_content):
         return "🇬🇧"
     return "🌍"
 
-# --- 3. THE SCANNER ---
+# --- 3. THE "SMART CHUNK" PARSER (No lost times!) ---
+sections = re.split(r'\n(?=#{1,2} )', '\n' + raw_text)
+
 weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 days_db = {}
 directories_db = {}
-current_bucket = None
 
-for line in raw_text.split('\n'):
-    clean_line = line.strip()
-    if clean_line.startswith('#'):
-        header_text = re.sub(r'^#{1,2}\s+', '', clean_line).strip()
-        if 'DIRECTORY' in header_text:
-            current_bucket = header_text.replace('📚 DIRECTORY:', '').strip()
-            directories_db[current_bucket] = ""
-            continue
-        elif any(day in header_text for day in weekdays):
-            current_bucket = header_text
-            days_db[current_bucket] = ""
-            continue
-
-    if current_bucket in directories_db:
-        directories_db[current_bucket] += line + "\n"
-    elif current_bucket in days_db:
-        days_db[current_bucket] += line + "\n"
+for section in sections:
+    if not section.strip(): continue
+    
+    lines = section.strip().split('\n')
+    header_line = lines[0]
+    clean_title = re.sub(r'^#{1,2}\s+', '', header_line).strip()
+    content = '\n'.join(lines[1:]).strip()
+    
+    # Is it a Directory?
+    if 'DIRECTORY' in clean_title.upper():
+        dir_name = clean_title.replace('📚 DIRECTORY:', '').replace('DIRECTORY:', '').strip()
+        directories_db[dir_name] = content
+        
+    # Is it a Main Travel Day?
+    elif any(day in clean_title for day in weekdays):
+        days_db[clean_title] = content
+        
+    # If it's a sub-header (like ## 10:00 AM) append it to the active day!
+    else:
+        if days_db:
+            last_day = list(days_db.keys())[-1]
+            days_db[last_day] += f"\n\n### {clean_title}\n{content}"
 
 day_keys = list(days_db.keys())
 
-# --- INITIALIZE STATE MEMORY ---
 if "selected_day" not in st.session_state:
     st.session_state.selected_day = day_keys[0] if day_keys else None
 
-if "app_mode" not in st.session_state:
-    st.session_state.app_mode = "Timeline" 
-
+# Build the Matrix
 day_map = {"Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, "Friday": 5, "Saturday": 6}
 weeks = []
 current_week = [None] * 7
@@ -159,11 +165,14 @@ last_idx = -1
 for day in day_keys:
     idx = next((d_idx for d_name, d_idx in day_map.items() if d_name in day), None)
     if idx is None: continue
-    if idx <= last_idx:
+    
+    if idx <= last_idx or current_week[idx] is not None:
         weeks.append(current_week)
         current_week = [None] * 7
+        
     current_week[idx] = day
     last_idx = idx
+
 if any(current_week):
     weeks.append(current_week)
 
@@ -199,7 +208,14 @@ if st.session_state.app_mode == "Timeline":
                 if day_title:
                     try:
                         day_name = next(d for d in weekdays if d in day_title)[:2].upper()
-                        date_num = re.search(r'\d+', day_title).group()
+                        
+                        # SMART REGEX: Look specifically for the month to find the date number!
+                        date_match = re.search(r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d+)', day_title, re.IGNORECASE)
+                        if date_match:
+                            date_num = date_match.group(1)
+                        else:
+                            date_num = re.search(r'\d+', day_title).group()
+                            
                         flag = get_country_flag(days_db[day_title] + day_title)
                         button_label = f"{day_name}\n{date_num}\n{flag}"
                     except:
