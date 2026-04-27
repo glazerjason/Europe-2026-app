@@ -3,72 +3,65 @@ import pandas as pd
 import google.generativeai as genai
 import re
 
-# --- 1. UI CONFIGURATION (Using 'wide' to kill default margins) ---
-st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="wide")
+# --- 1. UI CONFIGURATION & CSS GRID ---
+st.set_page_config(page_title="Europe 2026", page_icon="🌍", layout="centered")
 
 custom_css = """
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     
-    /* 1. ABSOLUTE CENTERING */
-    .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 0rem !important;
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-        max-width: 600px !important; 
-        margin: 0 auto !important;   
+    /* Make Tabs look like native iOS Segmented Controls */
+    div[data-testid="stTabs"] > div {
+        display: flex;
+        justify-content: space-evenly;
+        background-color: #f3f4f6;
+        border-radius: 12px;
+        padding: 4px;
+        margin-bottom: 20px;
+    }
+    button[data-baseweb="tab"] {
+        flex: 1;
+        border-radius: 8px !important;
+        padding: 10px 0px !important;
+        font-weight: 700 !important;
+    }
+    button[aria-selected="true"] {
+        background-color: white !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+        color: #007AFF !important;
     }
     
-    /* 2. ANTI-STACKING: Force Streamlit columns to stay horizontal on mobile */
-    div[data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 6px !important; /* Clean gap between all buttons */
-        margin-bottom: 8px !important;
+    /* THE CSS GRID: Rigid 7-column calendar */
+    div[data-testid="stVerticalBlock"] > div > div[data-testid="stHorizontalBlock"] {
+        display: grid !important;
+        grid-template-columns: repeat(7, 1fr) !important;
+        gap: 4px !important;
+        margin-bottom: 4px !important;
     }
     
-    /* Allow narrow calendar columns to shrink below minimums on small screens */
-    div[data-testid="column"] {
-        min-width: 0 !important;
-        padding: 0 !important;
-    }
-
-    /* 3. UNIVERSAL BUTTON STYLING (Auto-adjusts for Toggle vs Calendar) */
+    /* Naked Calendar Buttons */
     div.stButton > button {
-        background-color: #ffffff !important;
-        border: 1px solid #d1d5db !important;
-        border-radius: 12px !important; 
+        background-color: transparent !important;
+        border: none !important;
         box-shadow: none !important;
-        color: #1c1e21 !important; 
+        color: #9ca3af; 
+        height: 60px !important; 
         width: 100% !important;
-        min-height: 48px !important; /* Shorter base height for the 2-button toggle */
-        padding: 6px 2px !important;
-        font-size: 13px !important; 
-        font-weight: 700 !important; 
-        white-space: pre-wrap !important; /* Allows the \n to stack the Calendar text natively */
-        line-height: 1.2 !important;
-        
-        /* Flexbox centers the text vertically and horizontally */
-        display: flex !important;
-        flex-direction: column !important; 
-        align-items: center !important;
-        justify-content: center !important;
-        text-align: center !important;
-        transition: all 0.2s;
+        padding: 0px !important;
+        font-size: 11px !important; 
+        font-weight: 600; 
+        white-space: pre-wrap !important;
+        line-height: 1.2;
     }
     
-    div.stButton > button:hover { 
-        border-color: #9ca3af !important; 
-    }
+    div.stButton > button:hover { color: #1c1e21 !important; }
     
-    /* Active State (Blue Highlight for Mode Toggle AND Calendar Day) */
+    /* Active Calendar Day */
     div.stButton > button[kind="primary"] { 
         color: #007AFF !important; 
         font-weight: 800 !important;
         background-color: #eff6ff !important;
-        border-color: #007AFF !important;
+        border-radius: 8px !important;
     }
 </style>
 """
@@ -96,7 +89,7 @@ def get_country_flag(text_content):
         return "🇬🇧"
     return "🌍"
 
-# --- 3. THE PARSER (100% UNTOUCHED FROM YOUR WORKING CODE) ---
+# --- 3. THE SCANNER ---
 weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 days_db = {}
 directories_db = {}
@@ -122,12 +115,8 @@ for line in raw_text.split('\n'):
 
 day_keys = list(days_db.keys())
 
-# --- INITIALIZE STATE MEMORY ---
 if "selected_day" not in st.session_state:
-    st.session_state.selected_day = day_keys[0] if day_keys else None
-
-if "app_mode" not in st.session_state:
-    st.session_state.app_mode = "Timeline" # Defaults to the Calendar view
+    st.session_state.selected_day = day_keys[0]
 
 day_map = {"Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, "Friday": 5, "Saturday": 6}
 weeks = []
@@ -145,34 +134,15 @@ for day in day_keys:
 if any(current_week):
     weeks.append(current_week)
 
-# ==========================================
-# UI BUILD OUT STARTS HERE
-# ==========================================
+# --- 4. THE TWO-ROOM ARCHITECTURE (Tabs) ---
+st.title("📱 EUROPE 2026")
 
-# --- 4. THE MODE TOGGLE ---
-toggle_cols = st.columns(2)
-with toggle_cols[0]:
-    if st.button("🗓️ Timeline", use_container_width=True, type="primary" if st.session_state.app_mode == "Timeline" else "secondary"):
-        st.session_state.app_mode = "Timeline"
-        st.rerun()
-with toggle_cols[1]:
-    if st.button("🤖 Co-Pilot", use_container_width=True, type="primary" if st.session_state.app_mode == "Agent" else "secondary"):
-        st.session_state.app_mode = "Agent"
-        st.rerun()
-
-st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+tab_cal, tab_ai = st.tabs(["🗓️ Timeline", "🤖 Co-Pilot"])
 
 # ==========================================
-# ROOM 1: THE CALENDAR
+# ROOM 1: THE CALENDAR (Tab 1)
 # ==========================================
-if st.session_state.app_mode == "Timeline":
-    # 1. The HUD Header
-    selected = st.session_state.selected_day
-    st.markdown(f"## 📱 EUROPE 2026")
-    if selected:
-        st.markdown(f"#### {get_country_flag(days_db[selected] + selected)} {selected}")
-    
-    # 2. The Calendar Matrix (100% Untouched logic)
+with tab_cal:
     for week in weeks:
         cols = st.columns(7)
         for i in range(7):
@@ -196,30 +166,33 @@ if st.session_state.app_mode == "Timeline":
 
     st.divider()
 
-    # 3. The Itinerary Details
-    if selected:
-        st.markdown(days_db[selected])
+    # The HUD
+    selected = st.session_state.selected_day
+    st.markdown(f"### {get_country_flag(days_db[selected] + selected)} {selected}")
+    st.markdown(days_db[selected])
     st.divider()
 
-    # 4. Operations Vault
+    # The Directories
     st.subheader("📂 Operations Vault")
     for dir_title, dir_content in directories_db.items():
         with st.expander(f"📁 {dir_title}", expanded=False):
             st.markdown(dir_content)
 
 # ==========================================
-# ROOM 2: THE AI AGENT
+# ROOM 2: THE AI AGENT (Tab 2)
 # ==========================================
-elif st.session_state.app_mode == "Agent":
-    st.markdown(f"## 🤖 Agent Co-Pilot")
+with tab_ai:
+    st.subheader("🤖 Ask the Trip Director")
     
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
+    # Display chat history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
+    # Chat Input (Only active when this tab is open!)
     if prompt := st.chat_input("Ask a logistics question..."):
         st.chat_message("user").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
