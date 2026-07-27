@@ -185,12 +185,21 @@ if any(current_week):
 
 # --- 4. BRIXBY AI RESPONSE GENERATOR WITH GOOGLE SEARCH & CONTEXT ANCHOR ---
 def get_brixby_response(prompt, messages_history, raw_itinerary):
-    api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    # 1. Safely retrieve the API Key
+    api_key = None
+    try:
+        api_key = st.secrets.get("GEMINI_API_KEY")
+    except Exception:
+        pass
+        
     if not api_key:
-        return "⚠️ Brixby Notice: API key not found. Please set `GEMINI_API_KEY` in Streamlit secrets."
+        api_key = os.environ.get("GEMINI_API_KEY")
+
+    if not api_key:
+        return "⚠️ Brixby Notice: API key not found. Please set `GEMINI_API_KEY` in Streamlit secrets or as an environment variable."
     
     try:
-        # Initialize the new SDK client
+        # 2. Initialize the new SDK client
         client = genai.Client(api_key=api_key)
         
         system_instruction = (
@@ -206,14 +215,13 @@ def get_brixby_response(prompt, messages_history, raw_itinerary):
             "3. Be friendly, conversational, concise, and highly practical for on-the-go travel."
         )
 
-        # Build the conversation history using the new dictionary format
+        # 3. Format the chat history for the new SDK
         formatted_history = []
-        # messages_history already includes the current user prompt at the end
         for msg in messages_history:
             role = "user" if msg["role"] == "user" else "model"
             formatted_history.append({"role": role, "parts": [{"text": msg["content"]}]})
 
-        # Configure the Google Search Tool and System Instructions
+        # 4. Configure Google Search Tool
         search_tool = types.Tool(google_search=types.GoogleSearch())
         config = types.GenerateContentConfig(
             system_instruction=system_instruction,
@@ -221,7 +229,7 @@ def get_brixby_response(prompt, messages_history, raw_itinerary):
             temperature=0.7
         )
 
-        # Call the new gemini-2.5-flash model
+        # 5. Call the correct model
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=formatted_history,
