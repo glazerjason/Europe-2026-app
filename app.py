@@ -111,7 +111,7 @@ custom_css = """
 st.markdown(custom_css, unsafe_allow_html=True)
 
 # --- 2. DATA LOADING & FLAG SCANNER ---
-  def load_data():
+def load_data():
     try:
         with open("itinerary.md", "r", encoding="utf-8") as file:
             return file.read().replace('\r', '')
