@@ -188,9 +188,10 @@ def get_brixby_response(prompt, messages_history, raw_itinerary):
     api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
     if not api_key:
         return "⚠️ Brixby Notice: API key not found. Please set `GEMINI_API_KEY` in Streamlit secrets."
-
+    
     try:
-        genai.configure(api_key=api_key)
+        # Initialize the new SDK client
+        client = genai.Client(api_key=api_key)
         
         system_instruction = (
             "You are Brixby, an expert AI travel assistant for Europe 2026.\n"
@@ -205,46 +206,32 @@ def get_brixby_response(prompt, messages_history, raw_itinerary):
             "3. Be friendly, conversational, concise, and highly practical for on-the-go travel."
         )
 
+        # Build the conversation history using the new dictionary format
         formatted_history = []
-        for msg in messages_history[:-1]:
+        # messages_history already includes the current user prompt at the end
+        for msg in messages_history:
             role = "user" if msg["role"] == "user" else "model"
-            formatted_history.append({"role": role, "parts": [msg["content"]]})
+            formatted_history.append({"role": role, "parts": [{"text": msg["content"]}]})
 
-        # Preferred models in order
-        candidate_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
-        search_tools = [{'google_search': {}}, 'google_search_retrieval']
+        # Configure the Google Search Tool and System Instructions
+        search_tool = types.Tool(google_search=types.GoogleSearch())
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            tools=[search_tool],
+            temperature=0.7
+        )
 
-        for model_name in candidate_models:
-            for tool_opt in search_tools:
-                try:
-                    model = genai.GenerativeModel(
-                        model_name=model_name,
-                        system_instruction=system_instruction,
-                        tools=tool_opt
-                    )
-                    chat = model.start_chat(history=formatted_history)
-                    response = chat.send_message(prompt)
-                    return response.text
-                except Exception:
-                    continue
-
-        # Fallback without search tools if grounding fails
-        for model_name in candidate_models:
-            try:
-                model = genai.GenerativeModel(
-                    model_name=model_name,
-                    system_instruction=system_instruction
-                )
-                chat = model.start_chat(history=formatted_history)
-                response = chat.send_message(prompt)
-                return response.text
-            except Exception:
-                continue
-
-        return "⚠️ Brixby Notice: Unable to generate a response at this time. Please try again."
+        # Call the new gemini-2.5-flash model
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=formatted_history,
+            config=config
+        )
+        
+        return response.text
 
     except Exception as e:
-        return f"⚠️ Brixby Notice: Unable to complete request ({e}). Please check your configuration."
+        return f"⚠️ Brixby Notice: Unable to generate a response at this time. Exception Details: {str(e)}"
 
 # --- UI LAYOUT ---
 with st.container(key="mode_toggle_container"):
